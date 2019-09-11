@@ -1,0 +1,22 @@
+﻿    [ ] SS: Quick command to pick up a new stack starting from master
+    [ ] SS: Script Bug: links in the finish request have extra long names
+    [ ] SS: Experiment with rebasing
+
+        [ ] SS: push-stack
+            [x] Complain if not stacked
+            [x] Complain if there are no changes
+            [?] If Something has been pushed, require the -force parameter to include the change
+            [ ] If fresh PR,
+                [ ] first line of commits is title
+                    all the rest is the description
+                [ ] push changes
+                [ ] generate PR
+            [ ] If old PR, add new commit descriptions to PR drscription
+            [ ] Sanity check: there should only be at most one PR
+            [ ] Wrap dangling changes into a commit or bail
+                - Enter commit comment or press ESC
+        [ ] Push-stack
+            - auto checkin if there are no commits
+	
+	[ ] Sharing a stack with others
+		Import-Stack
