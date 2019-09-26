@@ -1,10 +1,1 @@
 
-
-[ ] Bug: Fails on a brand new empty branch
-[ ] Bug: Fails when the branch is not tracking something on the server
-
-[ ] How to get shortstack to work when I don't have createbranch permissions? (E.g: OS Branch)
-
-[ ] Error in script
-    The readme says to run Import-Module c:\tools\shortstack\ShortStack.psm1 -Force
-    It should say Import-Module c:\tools\shortstack\scripts\ShortStack.psm1 -Force
