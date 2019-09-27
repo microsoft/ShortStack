@@ -1,4 +1,9 @@
 ﻿	[ ] SS:  When finishing a stack auto-add all of the participats in the individual code reviews
+
+    [ ] SS: Be smart about when to push a new level or update an existing one.  Maybe if the files are similar.
+    [ ] SS Bug: Finish puts incorrect material in the final description
+
+    
     [ ] SS: Quick command to pick up a new stack starting from master
     [ ] SS: Script Bug: links in the finish request have extra long names
     [ ] SS: Experiment with rebasing
@@ -24,17 +29,13 @@
 
 
 		[ ] Bug: Fails on a brand new empty branch
-[ ] Bug: Fails when the branch is not tracking something on the server
+    [ ] Bug: Fails when the branch is not tracking something on the server
 
-[ ] How to get shortstack to work when I don't have createbranch permissions? (E.g: OS Branch)
+    [ ] How to get shortstack to work when I don't have createbranch permissions? (E.g: OS Branch)
 
-[ ] Error in script
-    The readme says to run Import-Module c:\tools\shortstack\ShortStack.psm1 -Force
-    It should say Import-Module c:\tools\shortstack\scripts\ShortStack.psm1 -Force
-
-
+    [ ] Error in script
+        The readme says to run Import-Module c:\tools\shortstack\ShortStack.psm1 -Force
+        It should say Import-Module c:\tools\shortstack\scripts\ShortStack.psm1 -Force
 	[ ] pull down a stack from the server and mess with it locally
         - Need to be able to resolve when branch N on the server is ahead of local N branch
 
-	
-	

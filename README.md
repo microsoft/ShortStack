@@ -33,4 +33,4 @@ $VSTSPersonalAccessToken="(your VSTS personal access key)"
 (Coming soon)
 
 # Contribute
-We are current in Hackathon mode:  https://login.microsoftonline.com/common/oauth2/v2.0/authorize?redirect_uri=https%3A%2F%2Fgaragehackbox.azurewebsites.net%2Fauth%2Fopenid%2Freturn&response_type=code%20id_token&response_mode=form_post&client_id=0b6552b8-a83a-45f3-adf3-96b3bcacdd7d&state=9HY3lSHCtLmGakbwTFLOpa8hThcelFtF&nonce=NeQzsXK7Qzd2cRVKPgqDQ3sO2s1rONcL&scope=offline_access%20openid%20profile%20email%20https%3A%2F%2Fgraph.microsoft.com%2Fuser.read%20https%3A%2F%2Fgraph.microsoft.com%2Fuser.readbasic.all&x-client-SKU=passport-azure-ad&x-client-Ver=3.0.12
+Please feel free to fork your own repo and submit your work as a PR.  We will code review and bring in changes that meet a high quality bar.
