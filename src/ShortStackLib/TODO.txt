@@ -1,6 +1,6 @@
 
     [ ] SS: Be smart about when to push a new level or update an existing one.  Maybe if the files are similar.
-
+    [ ] SS Bug: Finish puts incorrect material in the final description
 
     
     [ ] SS: Quick command to pick up a new stack starting from master
