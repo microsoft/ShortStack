@@ -521,7 +521,7 @@ function get_vsts_auth_header
 #-----------------------------------------------------------------------------
 function Get-VSTSUserGuids 
 {
-    $response = get_pull_requests("&status=completed") 
+    $response = get_pull_requests("") 
 
     $output = [ordered]@{}
     foreach($request in $response)
