@@ -1,4 +1,8 @@
-﻿	[ ] SS:  When finishing a stack auto-add all of the participats in the individual code reviews
+    [ ] Fix the SS script
+        [ ] Dont finish if PR's aren't completed.
+        [ ] Include only the appropriate PRs in the finish description
+
+    [ ] SS:  When finishing a stack auto-add all of the participats in the individual code reviews
 
     [ ] SS: Be smart about when to push a new level or update an existing one.  Maybe if the files are similar.
     [ ] SS Bug: Finish puts incorrect material in the final description
