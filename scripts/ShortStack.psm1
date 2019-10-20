@@ -534,7 +534,8 @@ function Get-VSTSUserGuids
 
     foreach($item in $output.GetEnumerator())
     {
-        write-host $item.Name ": " $item.Value
+        write-host ("# {0}" -f $item.Name)
+        write-host ("reviewerid={0}`n" -f $item.Value)
     }
 }
 
