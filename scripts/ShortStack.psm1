@@ -1282,7 +1282,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
         }
     }
     $branchRoot = "refs/heads/" + $stackInfo.Template
-    $pullRequestLinks = "### Links to Stacked Pull requests: `n"
+    $pullRequestLinks = "### Links to Stacked Pull Requests: `n"
     foreach($pullRequest in $pullRequests)
     {
         $description += $pullRequest."title" + "`n"
@@ -1298,11 +1298,10 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             $jsonPatch.Add('lastMergeSourceCommit', '{ "commitId": "' + $lastCommitId + '" } ')
             patch_pull_request $pullRequest $jsonPatch
 
-            $repositoryUrl = $pullRequest."repository"."url"
-            $remoteWebUrl = ((rest_get $repositoryUrl)."remoteUrl") + "/pullrequest/" + $pullRequest."pullRequestId"
-            $prBranchNumber = ($pullRequest."sourceRefName").SubString($branchRoot.Length)
-            $linkDisplayText = $stackInfo.Name + "_$prBranchNumber " + $pullRequest."title" 
-            $pullRequestLinks += "* [$linkDisplayText]($remoteWebUrl)`n"
+            # VSTS markdown will automatically add links to Pull Requests if the IDs
+            # are prefixed with an exclamation point, e.g.: !123456
+            $pullRequestLinks += "!{0}`n" -f $pullRequest."pullRequestId"
+
             # Sleep to let the commits from the completed PR catch up
             Start-Sleep -Milliseconds 2000
        }
