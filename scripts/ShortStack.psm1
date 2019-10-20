@@ -544,7 +544,7 @@ function Get-VSTSUserGuids
 function govsts 
 {
     $url = git config --get remote.origin.url
-    start microsoft-edge:$url
+    open_url $url
 }
 
 #-----------------------------------------------------------------------------
@@ -570,6 +570,25 @@ function get_default_reviewers
         }
     }
     return ,$reviewers
+}
+
+#-----------------------------------------------------------------------------
+# Open the provided URL with the default browser
+#-----------------------------------------------------------------------------
+function open_url([string]$url)
+{
+    # While in theory the following could be reduced to just
+    #  [System.Diagnostics.Process]::Start("start", $url) | Out-Null
+    # For some reason it occasionally throws a "The system cannot find the file specified." exception.
+    # The following approach is more specific, but has proven more reliable.
+    # It has been tested with Firefox, Chrome, IE, Edge, Edge Dev, and Opera.
+
+    $prog = (Get-ItemProperty 'HKCU:\SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice').ProgId
+    $arguments = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$prog\shell\open\command\")."(default)"
+    $arguments = $arguments -replace "%1",$url
+    $cmd = "cmd.exe"
+    $arguments = '/c "' + $arguments + '"'
+    [System.Diagnostics.Process]::Start($cmd, $arguments) | Out-Null
 }
 
 #-----------------------------------------------------------------------------
@@ -734,7 +753,7 @@ function sshelp_commands
     write-host -ForegroundColor white "    govsts"
     write-host "         Open the VSTS web page for this repository"
     write-host -ForegroundColor white "    Get-VSTSUserGuids"
-    write-host "         Show the Vsts user ids that are active in this repository (usefule for default reviewer file)"
+    write-host "         Show the VSTS user ids that are active in this repository (useful for default reviewer file)"
 
 }
 
@@ -1326,7 +1345,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
         $pullRequest = rest_get($result."url")
         $remoteWebUrl = $pullRequest."repository"."remoteUrl"
         $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
-        [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+        open_url $remoteWebUrl
     }
     else
     {
@@ -1450,7 +1469,7 @@ function sspush($force)
     {
         write-host -ForegroundColor Red "******* ERROR *********"
         write-host -ForegroundColor Red 'There is more than one pull request sourced from ' + $currentBranch
-        write-host -ForegroundColor Red 'Type "govsts" to open vsts and resolve your activie pull reqeusts.'
+        write-host -ForegroundColor Red 'Type "govsts" to open vsts and resolve your active pull reqeusts.'
         return
     }
     elseif($pullRequests.Count -eq 1)
@@ -1543,7 +1562,7 @@ function sspush($force)
             $pullRequest = rest_get($result."url")
             $remoteWebUrl = $pullRequest."repository"."remoteUrl"
             $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
-            [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+            open_url $remoteWebUrl
         }
         else
         {
