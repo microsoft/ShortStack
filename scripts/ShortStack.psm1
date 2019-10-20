@@ -1458,7 +1458,14 @@ function sspush($force)
     {
         if($force -ne "--force")
         {
-            throw "A commit has already been pushed to this level in the stack.  Use --force if you really want to add another commit at this level."
+            write-host -ForegroundColor Yellow "Warning: A commit has already been pushed to this level in the stack!"
+            $response = read-host -Prompt "Are you sure you want to push these changes here [y/N]? "
+            write-host -ForegroundColor Gray "(In the future, you can use --force to skip this question)."
+            if($response.Trim() -inotlike 'Y*')
+            {
+                write-host "Push canceled."
+                return
+            }
         }
 
         write-host "Pushing changes up to $currentBranch..."
