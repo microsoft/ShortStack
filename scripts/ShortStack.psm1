@@ -151,6 +151,32 @@ function show_vsts_error($webUrl)
 }
 
 #-----------------------------------------------------------------------------
+# Generic function for making a rest GitHub API v4 GraphQL Query
+#-----------------------------------------------------------------------------
+function query_github([string]$query)
+{
+    (Invoke-RestMethod `
+        -Uri "https://api.github.com/graphql" `
+        -Method Post `
+        -ContentType "application/json" `
+        -Authentication Bearer `
+        -Token $(ConvertTo-SecureString $GitHubPersonalAccessToken -AsPlainText -Force) `
+        -Body "{ `"query`": `"$query`" }"
+    ).data
+}
+
+#-----------------------------------------------------------------------------
+# Gets the user's GitHub login name
+#-----------------------------------------------------------------------------
+function get_github_login()
+{
+    $query = "{ viewer { login } }"
+    (query_github $query).viewer.login
+}
+
+Write-Host "Signed into GitHub as:" (get_github_login)
+
+#-----------------------------------------------------------------------------
 # Generic function for making a rest GET call
 #-----------------------------------------------------------------------------
 function rest_get($uri)
@@ -168,7 +194,7 @@ function rest_get($uri)
 }
 
 #-----------------------------------------------------------------------------
-# Generic function for making a rest GET call
+# Generic function for making a rest PATCH call
 #-----------------------------------------------------------------------------
 function rest_patch($uri, $jsonDocument)
 {
