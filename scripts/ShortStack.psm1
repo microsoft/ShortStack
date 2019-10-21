@@ -97,12 +97,43 @@ function get_stack_info($stackName)
 }
 
 #-----------------------------------------------------------------------------
-# Generic function for making a rest GET call
+# Show help for web errors
 #-----------------------------------------------------------------------------
-function show_vsts_error
+function show_web_error
 {
     $webUrl = git config --get remote.origin.url
 
+    if ($webUrl -match "//github.com")
+    {
+        show_github_error
+    }
+    else
+    {
+        show_vsts_error $webUrl
+    }
+}
+
+#-----------------------------------------------------------------------------
+# Show help for GitHub errors
+#-----------------------------------------------------------------------------
+function show_github_error
+{
+    write-host -ForegroundColor Red "******* ERROR *********"
+    write-host -ForegroundColor Red 'Could not access GitHub. Please make sure that $GitHubPersonalAccessToken'
+    write-host -ForegroundColor Red "is set to the correct value in: $profile"
+    write-host -ForegroundColor White 'To get a current access token:'
+    write-host "    1) Visit https://github.com/settings/tokens"
+    write-host "    2) Click 'Generate new token'"
+    write-host "    3) Select the following scopes:"
+    write-host "         [x] repo (all)"
+    write-host "    4) Click 'Generate Token', then immediately copy the value displayed."
+}
+
+#-----------------------------------------------------------------------------
+# Show help for VSTS errors
+#-----------------------------------------------------------------------------
+function show_vsts_error($webUrl)
+{
     write-host -ForegroundColor Red "******* ERROR *********"
     write-host -ForegroundColor Red 'Could not access VSTS. Please make sure that $VSTSPersonalAccessToken'
     write-host -ForegroundColor Red 'is set to the correct value in your powershell config.'
@@ -129,7 +160,7 @@ function rest_get($uri)
     
     if($error.Count -gt 0)
     {
-        show_vsts_error
+        show_web_error
         return ,@()      
     }
 
@@ -146,7 +177,7 @@ function rest_patch($uri, $jsonDocument)
     
     if($error.Count -gt 0)
     {
-        show_vsts_error
+        show_web_error
         return ,@()      
     }
 
