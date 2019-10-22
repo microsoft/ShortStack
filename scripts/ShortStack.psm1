@@ -101,7 +101,7 @@ function get_stack_info($stackName)
 #-----------------------------------------------------------------------------
 function show_web_error
 {
-    $webUrl = git config --get remote.origin.url
+    $webUrl = get_remote_url
 
     if ($webUrl -match "//github.com")
     {
@@ -114,6 +114,46 @@ function show_web_error
 }
 
 #-----------------------------------------------------------------------------
+# Show help for GitHub security tokens
+#-----------------------------------------------------------------------------
+function show_github_token_help($indent=0)
+{
+    write-host "".PadLeft($indent) "To get a current access token:"
+    write-host "".PadLeft($indent) "    1) Visit https://github.com/settings/tokens"
+    write-host "".PadLeft($indent) "    2) Click 'Generate new token'"
+    write-host "".PadLeft($indent) "    3) Select the following scopes:"
+    write-host "".PadLeft($indent) "        user"
+    write-host "".PadLeft($indent) "        public_repo"
+    write-host "".PadLeft($indent) "        repo"
+    write-host "".PadLeft($indent) "        repo_deployment"
+    write-host "".PadLeft($indent) "        repo:status"
+    write-host "".PadLeft($indent) "        read:repo_hook"
+    write-host "".PadLeft($indent) "        read:org"
+    write-host "".PadLeft($indent) "        read:public_key"
+    write-host "".PadLeft($indent) "        read:gpg_key"
+    write-host "".PadLeft($indent) "    4) Click 'Generate Token', then immediately copy the value displayed."
+}
+
+#-----------------------------------------------------------------------------
+# Show help for VSTS security tokens
+#-----------------------------------------------------------------------------
+function show_vsts_token_help($indent=0)
+{
+    $webUrl = get_remote_url
+    write-host "".PadLeft($indent) "To get a current access token:"
+    write-host "".PadLeft($indent) "    1) Visit $webUrl"
+    write-host "".PadLeft($indent) "    2) Click on your user name on the VSTS page and click on 'My profile'"
+    write-host "".PadLeft($indent) "    3) From there, click on the 'Manage Security' link on the right"
+    write-host "".PadLeft($indent) "    4) Click on 'Add' to add a new token with these properties"
+    write-host "".PadLeft($indent) "         Description: Powershell access"
+    write-host "".PadLeft($indent) "         Expires In:  1 Year"
+    write-host "".PadLeft($indent) "         Accounts:    All accessible"
+    write-host "".PadLeft($indent) "         Description: Powershell access"
+    write-host "".PadLeft($indent) "         Scopes:      All"
+    write-host "".PadLeft($indent) "    5) Click 'Create Token', then immediately copy the value displayed."
+}
+
+#-----------------------------------------------------------------------------
 # Show help for GitHub errors
 #-----------------------------------------------------------------------------
 function show_github_error
@@ -121,12 +161,7 @@ function show_github_error
     write-host -ForegroundColor Red "******* ERROR *********"
     write-host -ForegroundColor Red 'Could not access GitHub. Please make sure that $GitHubPersonalAccessToken'
     write-host -ForegroundColor Red "is set to the correct value in: $profile"
-    write-host -ForegroundColor White 'To get a current access token:'
-    write-host "    1) Visit https://github.com/settings/tokens"
-    write-host "    2) Click 'Generate new token'"
-    write-host "    3) Select the following scopes:"
-    write-host "         [x] repo (all)"
-    write-host "    4) Click 'Generate Token', then immediately copy the value displayed."
+    show_github_token_help
 }
 
 #-----------------------------------------------------------------------------
@@ -137,32 +172,49 @@ function show_vsts_error($webUrl)
     write-host -ForegroundColor Red "******* ERROR *********"
     write-host -ForegroundColor Red 'Could not access VSTS. Please make sure that $VSTSPersonalAccessToken'
     write-host -ForegroundColor Red 'is set to the correct value in your powershell config.'
-    write-host -ForegroundColor White 'To get a current access token:'
-    write-host "    1) Visit $webUrl"
-    write-host "    2) Click on your user name on the VSTS page and click on 'My profile'"
-    write-host "    3) From there, click on the 'Manage Security' link on the right"
-    write-host "    4) Click on 'Add' to add a new token with these properties"
-    write-host "         Description: Powershell access"
-    write-host "         Expires In:  1 Year"
-    write-host "         Accounts:    All accessible"
-    write-host "         Description: Powershell access"
-    write-host "         Scopes:      All"
-    write-host "    5) Click 'Create Token', then immediately copy the value displayed."
+    show_vsts_token_help
 }
 
 #-----------------------------------------------------------------------------
-# Generic function for making a rest GitHub API v4 GraphQL Query
+# Clean up GraphQL JSON strings in preparation for transmission
+#-----------------------------------------------------------------------------
+function escape_github_query([string]$query)
+{
+    $query | ConvertTo-Json
+}
+
+#-----------------------------------------------------------------------------
+# Make a REST GitHub API v4 GraphQL Query
 #-----------------------------------------------------------------------------
 function query_github([string]$query)
 {
-    (Invoke-RestMethod `
+    try
+    {
+        $GitHubSecurePAT = ConvertTo-SecureString $GitHubPersonalAccessToken -AsPlainText -Force
+
+        $escaped = escape_github_query $query
+        write-host -f DarkGray "POST:"
+        write-host -f DarkGray $escaped 
+
+        $response = ((Invoke-RestMethod `
         -Uri "https://api.github.com/graphql" `
         -Method Post `
         -ContentType "application/json" `
         -Authentication Bearer `
-        -Token $(ConvertTo-SecureString $GitHubPersonalAccessToken -AsPlainText -Force) `
-        -Body "{ `"query`": `"$query`" }"
-    ).data
+        -Token $GitHubSecurePAT `
+        -Body "{ `"query`": $escaped }"
+        ).data)
+
+        write-host -f Gray ($response | ConvertTo-Json)
+        return $response
+    }
+    catch
+    {
+        write-host -f Yellow $_.Exception.Message
+        show_github_error
+        write-host -ForegroundColor Red $_.Exception.Message
+        write-host -ForegroundColor DarkGray $_.ScriptStackTrace
+    }
 }
 
 #-----------------------------------------------------------------------------
@@ -170,11 +222,21 @@ function query_github([string]$query)
 #-----------------------------------------------------------------------------
 function get_github_login()
 {
-    $query = "{ viewer { login } }"
-    (query_github $query).viewer.login
+    try
+    {
+        $query = "{ viewer { login } }"
+        (query_github $query).viewer.login
+    }
+    catch
+    {
+        write-host -ForegroundColor Red "******* ERROR *********"
+        write-host -ForegroundColor Red $_.Exception.Message
+        write-host -ForegroundColor DarkGray $_.ScriptStackTrace
+    }
 }
 
-Write-Host "Signed into GitHub as:" (get_github_login)
+write-host "Signed into GitHub as:" (get_github_login)
+
 
 #-----------------------------------------------------------------------------
 # Generic function for making a rest GET call
@@ -210,15 +272,59 @@ function rest_patch($uri, $jsonDocument)
     return ,$output
 }
 
+function get_remote_url_parts_github($webUrl)
+{
+    $output = @{}
+    # GitHub urls take the form "https://github.com/JERisBRISK/test.git"
+    $partMatch = [regex]::Match($webUrl, "^https://(?<host>[^/]+)/(?<owner>[^/]+)/(?<repo>[^/]+)\.git")
+
+    $output.FullUrl = $webUrl
+    $output.BadUrl = $false
+    if($partMatch.Success)
+    {
+        $output.Host = $partMatch.Groups['host'].Value
+        $output.Owner = $partMatch.Groups['owner'].Value
+        $output.Repository = $partMatch.Groups['repo'].Value
+    }
+    else
+    {
+        $output.BadUrl = $true
+    }
+    return $output    
+}
+
 #-----------------------------------------------------------------------------
-# Get the url for the specified api;  eg: get_api_url("pullRequests")
-# Note: the url will have ?api-version already specified
+# Get the remote repository URL
+#-----------------------------------------------------------------------------
+function is_github
+{
+    (get_remote_url).IndexOf("https://github.com/") -ge 0
+}
+
+#-----------------------------------------------------------------------------
+# Get the remote repository URL
+#-----------------------------------------------------------------------------
+function get_remote_url
+{
+    git config --get remote.origin.url
+}
+
+#-----------------------------------------------------------------------------
+# Break the remote repository URL into parts
 #-----------------------------------------------------------------------------
 function get_remote_url_parts
 {
     $output = @{}
-    $webUrl = git config --get remote.origin.url
+    $webUrl = get_remote_url
+
+    if(is_github)
+    {
+        return get_remote_url_parts_github $webUrl
+    }
+
+    # VSTS urls take the form "https://Organization.visualstudio.com/DefaultCollection/ProjectName/_git/RepositoryName"
     $partMatch = [regex]::Match($webUrl, "^https://(.+?)\.([^/]+)/([^/]+)?(/[^/]+)?/_git(/[^/]+)?")
+  
     $output.FullUrl = $webUrl
     $output.BadUrl = $false
     if($partMatch.Success)
@@ -254,32 +360,104 @@ function get_remote_url_parts
 #-----------------------------------------------------------------------------
 function get_api_url($api, $query)
 {
-    $parts = get_remote_url_parts
-    if($parts.BadUrl)
+    if ((is_github))
     {
-        write-host -ForegroundColor Red "ERROR: the web url is in an unrecognized format:" $parts.FullUrl
-        return ""
+        return "https://api.github.com/graphql"
     }
-
-    $server = $parts.Server
-    $host = $parts.Host
-    $collection = $parts.Collection
-    $project = $parts.Project
-    $repository = $parts.Repository
-
-    $apiUrl = "https://$server.$host/$collection/$project/_apis/git/repositories/$repository"
-
-    return $apiUrl + "/$api" +"?api-version=3.0" + $query
+    else
+    {
+        $parts = get_remote_url_parts
+        if($parts.BadUrl)
+        {
+            write-host -ForegroundColor Red "ERROR: the web url is in an unrecognized format:" $parts.FullUrl
+            return ""
+        }
+    
+        $server = $parts.Server
+        $host = $parts.Host
+        $collection = $parts.Collection
+        $project = $parts.Project
+        $repository = $parts.Repository
+    
+        $apiUrl = "https://$server.$host/$collection/$project/_apis/git/repositories/$repository"
+    
+        return $apiUrl + "/$api" +"?api-version=3.0" + $query
+    }
 }
 
+#-----------------------------------------------------------------------------
+# Get all matching pull requests from VSTS
+#-----------------------------------------------------------------------------
+function get_pull_requests_vsts($query)
+{
+    $getPullRequestsUri = get_api_url "pullRequests" $query
+    return ,(rest_get($getPullRequestsUri))."value";
+}
+
+#-----------------------------------------------------------------------------
+# Get all matching pull requests from GitHub
+#-----------------------------------------------------------------------------
+function get_pull_requests_github()
+{
+    $parts = get_remote_url_parts
+    $owner = $parts.owner
+    $repo = $parts.repository
+
+    $query = @"
+query {
+    repository(name:"$repo", owner:"$owner") {
+        nameWithOwner
+        refs(first: 100, refPrefix: "refs/heads/") {
+            nodes {
+                name
+                associatedPullRequests(states:OPEN, first:100) {
+                    edges {
+                        node {
+                            url
+                            title
+                            state
+                        }
+                    }
+                }
+                target {
+                    ... on Commit {
+                        oid
+                        committedDate
+                        author {
+                            date
+                            email
+                            name
+                            avatarUrl
+                            user {
+                                login
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"@
+    $result = query_github $query
+    $result
+}
 
 #-----------------------------------------------------------------------------
 # Get all the pull requests that match the query
 #-----------------------------------------------------------------------------
 function get_pull_requests($query) 
-{    
-    $getPullRequestsUri = get_api_url "pullRequests" $query
-    return ,(rest_get($getPullRequestsUri))."value";
+{
+    if ((is_github))
+    {
+        write-host -f DarkGray "Getting pull requests from GitHub"
+        get_pull_requests_github
+    }
+    else
+    {
+        write-host -f DarkGray "Getting pull requests from VSTS"
+        get_pull_requests_vsts $query
+    }
 }
 
 #-----------------------------------------------------------------------------
@@ -866,24 +1044,24 @@ function sshelp_setup
     {
         $myPath = "(The path to this module)"
     }
-    $webUrl = git config --get remote.origin.url
+    $webUrl = get_remote_url
 
     write-host "Setup for stacked pull request workflow:"
     write-host "    1) Install posh-git by running: PowerShellGet\Install-Module posh-git -Scope CurrentUser"
     write-host "       start up posh git in your environment: Import-module posh-git"
     write-host "       (you will see git information in your prompt if posh-git is loaded)"
     write-host
-    write-host '    2) Get a current VSTS access token:'
-    write-host "           1) Visit $webUrl"
-    write-host "           2) Click on your user name on the VSTS page and click on 'My profile'"
-    write-host "           3) From there, click on the 'Manage Security' link on the right"
-    write-host "           4) Click on 'Add' to add a new token with these properties"
-    write-host "              Description: Powershell access"
-    write-host "              Expires In:  1 Year"
-    write-host "              Accounts:    All accessible"
-    write-host "              Description: Powershell access"
-    write-host "              Scopes:      All"
-    write-host "           5) Click 'Create Token', then immediately copy the value displayed."    
+    write-host '    2) Get a current access token:'
+
+    if (is_github)
+    {
+        show_github_token_help -indent:8
+    }
+    else
+    {
+        show_vsts_token_help -indent:8
+    }
+    
     write-host
     write-host "    3) Include the posh-git module in your environment by loading it from your profile:"
     write-host '           mkdir C:\Users\$env:username\Documents\WindowsPowerShell'
@@ -921,7 +1099,8 @@ function sshelp($subHelp)
         default     { sshelp_main }
     }
     write-host
-    write-host "Question and/or comments?  Please contact Eric.Jorgensen@microsoft.com"
+    write-host "Got a question, bug, or suggestion?"
+    write-host "Please file an issue here: https://github.com/microsoft/ShortStack/issues"
     write-host
 }
 
