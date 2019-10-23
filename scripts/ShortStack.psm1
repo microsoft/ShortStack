@@ -193,8 +193,9 @@ function query_github([string]$query)
         $GitHubSecurePAT = ConvertTo-SecureString $GitHubPersonalAccessToken -AsPlainText -Force
 
         $escaped = escape_github_query $query
-        write-host -f DarkGray "POST:"
-        write-host -f DarkGray $escaped 
+        #write-host -f Yellow $query
+        #write-host -f DarkGray "POST:"
+        #write-host -f DarkGray $escaped 
 
         $response = ((Invoke-RestMethod `
         -Uri "https://api.github.com/graphql" `
@@ -205,7 +206,7 @@ function query_github([string]$query)
         -Body "{ `"query`": $escaped }"
         ).data)
 
-        write-host -f Gray ($response | ConvertTo-Json)
+        #write-host -f DarkGray ($response | ConvertTo-Json -Depth 100)
         return $response
     }
     catch
@@ -410,27 +411,14 @@ query {
         refs(first: 100, refPrefix: "refs/heads/") {
             nodes {
                 name
-                associatedPullRequests(states:OPEN, first:100) {
+                associatedPullRequests(first:100) {
                     edges {
                         node {
+                            baseRefName
+                            headRefName
                             url
                             title
                             state
-                        }
-                    }
-                }
-                target {
-                    ... on Commit {
-                        oid
-                        committedDate
-                        author {
-                            date
-                            email
-                            name
-                            avatarUrl
-                            user {
-                                login
-                            }
                         }
                     }
                 }
@@ -439,8 +427,42 @@ query {
     }
 }
 "@
-    $result = query_github $query
-    $result
+    query_github $query
+}
+
+#-----------------------------------------------------------------------------
+# Converts a query string (URL arguments) into a dictionary
+# query - a string like &foo=bar&baz=bop
+#-----------------------------------------------------------------------------
+function get_url_arguments_as_dictionary([string]$query)
+{
+    $dict = @{}
+    $query.Split('&', [System.StringSplitOptions]::RemoveEmptyEntries)
+    | foreach-object {
+        $split = $_.Split('=', [System.StringSplitOptions]::RemoveEmptyEntries)
+        $dict[$split[0]] = [System.Web.HttpUtility]::UrlDecode($split[1]) -replace "^refs/heads/",""
+    }
+
+    $dict
+}
+
+#-----------------------------------------------------------------------------
+# Get all the pull requests that match the provided refName and state
+# queryResults - the return value of get_pull_requests_github
+#      refName - a branch name, e.g. users/me/MyBranch_01
+#        state - one of OPEN, CLOSED, MERGED
+#-----------------------------------------------------------------------------
+function filter_github_pull_requests($queryResults, $refName, $state)
+{
+    # get all pull requests for the provided refName, then filter by state
+    # from those, create a dictionary that is similar to the one returned by VSTS
+    $pullRequests = @()
+    $pullRequests += $result.repository.refs.nodes.associatedPullRequests.edges.node
+                | where-object { $_.state -ieq $state -and $_.headRefName -ieq $refName }
+                | select-object -Property @{Name='status'; Expression={$_.state}}, headRefName, baseRefName, url, title
+
+    # comma (to array) operator is necessary to avoid 'property 'Count' cannot be found on this object' errors.
+    ,$pullRequests
 }
 
 #-----------------------------------------------------------------------------
@@ -450,12 +472,24 @@ function get_pull_requests($query)
 {
     if ((is_github))
     {
-        write-host -f DarkGray "Getting pull requests from GitHub"
-        get_pull_requests_github
+        #write-host -f DarkGray "Getting pull requests from GitHub"
+        $result = get_pull_requests_github
+
+        $parameters = get_url_arguments_as_dictionary $query
+
+        if ($parameters['status'] -ieq "Active")
+        {
+            return filter_github_pull_requests $result $parameters['sourceRefName'] 'OPEN'
+        }
+
+        if ($parameters['status'] -ieq "Completed")
+        {
+            return filter_github_pull_requests $result $parameters['sourceRefName'] 'MERGED'
+        }
     }
-    else
+    else # VSTS
     {
-        write-host -f DarkGray "Getting pull requests from VSTS"
+        #write-host -f DarkGray "Getting pull requests from VSTS"
         get_pull_requests_vsts $query
     }
 }
