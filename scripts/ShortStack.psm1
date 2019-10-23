@@ -51,7 +51,7 @@ function get_stack_info($stackName)
     $output = @{}
     $output.IsStacked = $true
 
-    if($stackName -eq $null)
+    if($null -eq $stackName)
     {
         $currentBranch = get_current_branch
     }
@@ -236,7 +236,7 @@ function get_github_login()
     }
 }
 
-write-host "Signed into GitHub as:" (get_github_login)
+write-host -ForegroundColor Magenta "SHORTSTACK signed in to GitHub as:" (get_github_login)
 
 
 #-----------------------------------------------------------------------------
@@ -345,7 +345,7 @@ function get_remote_url_parts
     $output = @{}
     $webUrl = get_remote_url
 
-    if(is_github)
+    if((is_github))
     {
         return get_remote_url_parts_github $webUrl
     }
@@ -423,6 +423,26 @@ function get_pull_requests_vsts($query)
 }
 
 #-----------------------------------------------------------------------------
+# Get repository information from GitHub
+#-----------------------------------------------------------------------------
+function get_repository_info_github()
+{
+    $parts = get_remote_url_parts
+    $owner = $parts.owner
+    $repo = $parts.repository
+
+    $query = @"
+query {
+    repository(name:"$repo", owner:"$owner") {
+        id
+        name
+    }
+}
+"@
+    query_github $query
+}
+
+#-----------------------------------------------------------------------------
 # Get all matching pull requests from GitHub
 #-----------------------------------------------------------------------------
 function get_pull_requests_github()
@@ -460,7 +480,6 @@ query {
     query_github $query
 }
 
-
 #-----------------------------------------------------------------------------
 # Update the body/description of a pull request on GitHub
 #-----------------------------------------------------------------------------
@@ -472,6 +491,47 @@ mutation UpdateBody {
         input:{
             pullRequestId:"$id"
             body:"$body"
+        }) {
+        clientMutationId
+    }
+}
+"@
+    query_github $query
+}
+
+#-----------------------------------------------------------------------------
+# Create a pull request on GitHub
+#-----------------------------------------------------------------------------
+function create_pull_request_github($repoId, $title, $body, $source, $target)
+{
+    $query = @"
+mutation CreatePullRequest {
+    createPullRequest(
+        input: {
+            title:"$title"
+            body:"$description"
+            repositoryId:"$repoId"
+            baseRefName:"$target"
+            headRefName:"$source"
+        }) {
+        clientMutationId
+    }
+}
+"@
+    query_github $query
+}
+
+#-----------------------------------------------------------------------------
+# Complete a pull request on GitHub
+#-----------------------------------------------------------------------------
+function complete_pull_request_github($id)
+{
+    $query = @"
+    mutation MergePullRequest {
+    mergePullRequest(
+        input: {
+            pullRequestId:"MDExOlB1bGxSZXF1ZXN0MzMwNTgwMDcx"
+            mergeMethod:SQUASH,
         }) {
         clientMutationId
     }
@@ -502,27 +562,46 @@ function get_url_arguments_as_dictionary([string]$query)
 #      refName - a branch name, e.g. users/me/MyBranch_01
 #        state - one of OPEN, CLOSED, MERGED
 #-----------------------------------------------------------------------------
-function filter_github_pull_requests($queryResults, $refName, $state)
+function filter_github_pull_requests($refName, $state, $queryResults)
 {
     # get all pull requests for the provided refName, then filter by state
     # from those, create a dictionary that is similar to the one returned by VSTS
     $pullRequests = @()
-    $pullRequests += $result.repository.refs.nodes.associatedPullRequests.edges.node
-                | where-object { $_.state -ieq $state -and $_.headRefName -ieq $refName }
-                | select-object -Property `
-                    @{Name='pullrequestId'; Expression={$_.id}}, `
-                    @{Name='status'; Expression={$_.state}}, `
-                    @{Name='description'; Expression={$_.body}}, `
-                    baseRefName, `
-                    headRefName, `
-                    id, `
-                    body, `
-                    state, `
-                    title, `
-                    url `
+    try
+    {
+        $pullRequests += @($queryResults.repository.refs.nodes.associatedPullRequests.edges.node
+                    | select-object -Property `
+                        @{Name='description'; Expression={$_.body}}, `
+                        @{Name='pullrequestId'; Expression={$_.id}}, `
+                        @{Name='sourceRefName'; Expression={$_.headRefName}}, `
+                        @{Name='status'; Expression={$_.state}}, `
+                        @{Name='targetRefName'; Expression={$_.baseRefName}}, `
+                        baseRefName, `
+                        headRefName, `
+                        id, `
+                        body, `
+                        state, `
+                        title, `
+                        url)
+    }
+    catch
+    {
+        # when there are no pull requests, the 'edges' node doesn't exist
+        # we already have an empty set, so we can ignore this exception
+    }
 
-    # comma (to array) operator is necessary to avoid 'property 'Count' cannot be found on this object' errors.
-    ,$pullRequests
+    if(-not [string]::IsNullOrWhiteSpace($state))
+    {
+        $pullRequests = $pullRequests | where-object { $_.state -ieq $state }
+    }
+
+    if(-not [string]::IsNullOrWhiteSpace($refName))
+    {
+        $pullRequests = $pullRequests | where-object {$_.headRefName -ieq $refName }
+    }
+
+    write-host -f Yellow "filter_github_pull_requests"
+    return @($pullRequests)
 }
 
 #-----------------------------------------------------------------------------
@@ -530,27 +609,28 @@ function filter_github_pull_requests($queryResults, $refName, $state)
 #-----------------------------------------------------------------------------
 function get_pull_requests($query)
 {
-    if ((is_github))
+    if (is_github)
     {
+        write-host -f Yellow "get_pull_requests"
         #write-host -f DarkGray "Getting pull requests from GitHub"
-        $result = get_pull_requests_github
-
+        $results = get_pull_requests_github
+        #write-host -f Cyan ($results | ConvertTo-Json -Depth 100)
         $parameters = get_url_arguments_as_dictionary $query
 
         if ($parameters['status'] -ieq "Active")
         {
-            return filter_github_pull_requests $result $parameters['sourceRefName'] 'OPEN'
+            return @(filter_github_pull_requests $parameters['sourceRefName'] 'OPEN' $results)
         }
 
         if ($parameters['status'] -ieq "Completed")
         {
-            return filter_github_pull_requests $result $parameters['sourceRefName'] 'MERGED'
+            return @(filter_github_pull_requests $parameters['sourceRefName'] 'MERGED' $results)
         }
     }
     else # VSTS
     {
         #write-host -f DarkGray "Getting pull requests from VSTS"
-        get_pull_requests_vsts $query
+        @(get_pull_requests_vsts $query)
     }
 }
 
@@ -566,14 +646,48 @@ function get_current_pull_request()
     }
     $query="&status=Active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/" + $stackInfo.Branch)
-    $pullRequests = get_pull_requests($query)
+    $pullRequests = @(get_pull_requests($query))
     return $pullRequests[0]
 }
 
 #-----------------------------------------------------------------------------
-# Get all the commits that match the query
+# Get all the GitHub commits that match the query
 #-----------------------------------------------------------------------------
-function get_commits($remoteBranch, $numberToGet)
+function get_commits_github($remoteBranch, $numberToGet)
+{
+    $parts = get_remote_url_parts
+    $owner = $parts.owner
+    $repo = $parts.repository
+
+    $query = @"
+query {
+    repository(owner:"$owner", name:"$repo") {
+        id
+        ref(qualifiedName:"$remoteBranch") {
+			target {
+                ... on Commit {
+                    history(first:$numberToGet) {
+                        edges {
+                            node {
+                                id
+                                oid
+                                message
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+"@
+      query_github $query
+}
+
+#-----------------------------------------------------------------------------
+# Get all the VSTS commits that match the query
+#-----------------------------------------------------------------------------
+function get_commits_vsts($remoteBranch, $numberToGet)
 {
     if($null -eq $numberToGet)
     {
@@ -590,6 +704,40 @@ function get_commits($remoteBranch, $numberToGet)
     return @((rest_get($getPullRequestsUri))."value");
 }
 
+#-----------------------------------------------------------------------------
+# Get all the commits that match the query
+#-----------------------------------------------------------------------------
+function get_commits($remoteBranch, $numberToGet)
+{
+    if((is_github))
+    {
+        $result = get_commits_github $remoteBranch $numberToGet
+        $commits = @()
+        try
+        {
+            $commits += $result.repository.ref.target.history.edges.node
+                        | select-object -Property `
+                            @{Name='commitId'; Expression={$_.id}}, `
+                            id, `
+                            oid, `
+                            message `
+        }
+        catch
+        {
+            # when there are no pull requests, the 'edges' node doesn't exist
+            # we already have an empty set, so we can ignore this exception
+        }
+
+        # comma (to array) operator is necessary to avoid 'property 'Count' cannot be found on this object' errors.
+        write-host -f Yellow "get_commits"
+        @($commits)
+    }
+    else
+    {
+        get_commits_vsts $remoteBranch $numberToGet
+    }
+
+}
 
 #-----------------------------------------------------------------------------
 # Get a summary of all commit comments
@@ -849,7 +997,7 @@ function get_vsts_auth_header
 #-----------------------------------------------------------------------------
 function Get-VSTSUserGuids
 {
-    $response = get_pull_requests("")
+    $response = @(get_pull_requests(""))
 
     $output = [ordered]@{}
     foreach($request in $response)
@@ -1133,7 +1281,7 @@ function sshelp_workflow
 function sshelp_setup
 {
     $myPath = (Get-Module ShortStack).path
-    if($myPath -eq $null)
+    if($null -eq $myPath)
     {
         $myPath = "(The path to this module)"
     }
@@ -1231,7 +1379,7 @@ function ssstatus
 
         $query="&status=Active"
         $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$branchName")
-        $pullRequests = get_pull_requests($query)
+        $pullRequests = @(get_pull_requests $query)
         $representativePullRequest = $null
         if($pullRequests.Count -gt 0)
         {
@@ -1241,7 +1389,7 @@ function ssstatus
         {
             $query="&status=Completed"
             $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$branchName")
-            $pullRequests = get_pull_requests($query)
+            $pullRequests = @(get_pull_requests $query)
             if($pullRequests.Count -gt 0)
             {
                 $representativePullRequest = $pullRequests[0]
@@ -1260,7 +1408,7 @@ function ssstatus
              $unpushedStatus = "(Has unpushed commits) ";
         }
         write-host -NoNewLine -ForegroundColor $color "  "$i": "$branchName
-        if($representativePullRequest -eq $null)
+        if($null -eq $representativePullRequest)
         {
             write-host -ForegroundColor DarkGray "    $unpushedStatus *** NO Pull Request ***"
         }
@@ -1376,12 +1524,12 @@ function ssgo($number, $stackName)
     }
 
 
-    if($number -eq "last" -or $number -eq -1 -or $number -eq $null)
+    if($number -eq "last" -or $number -eq -1 -or $null -eq $number)
     {
         $number = $stackInfo.LastBranchNumber
     }
 
-    if($stackInfo.Origin -eq $null)
+    if($null -eq $stackInfo.Origin)
     {
         Write-host -ForegroundColor Red "The stack '$stackName' does not exist.  To start a stack:  ss new (name) (origin branch to track)"
         return;
@@ -1441,7 +1589,7 @@ function ssnew($name, $desiredOrigin)
     }
 
     # if this is an active stack, then override the desired origin with the last branch
-    if($stackInfo.Origin -ne $null)
+    if($null -ne $stackInfo.Origin)
     {
         $lastBranch = make_stackbranch_name $stackInfo.Name $stackInfo.LastBranchNumber
         if($lastBranch -ne $stackInfo.Branch)
@@ -1456,7 +1604,7 @@ function ssnew($name, $desiredOrigin)
     $number = $stackInfo.LastBranchNumber + 1
 
     # If we still don't have an origin, default to master
-    if($origin -eq $null)
+    if($null -eq $origin)
     {
         $origin = "master"
     }
@@ -1616,7 +1764,11 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
 
     # Mark active pull requests as completed
     $query = "&status=active"
-    $pullRequests = get_pull_requests($query)
+
+    # Despite Herculean efforts to ensure PowerShell returns a zero-element array,
+    # we still have to wrap this in @() to ensure that it didn't just 'upgrade'
+    # the empty to null.
+    $pullRequests = @(get_pull_requests $query)
     if($pullRequests.Count -eq 0)
     {
         write-host -ForegroundColor DarkYellow "No active pull requests for this stack, may indicate an issue with this operation."
@@ -1630,6 +1782,8 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             return
         }
     }
+    write-host -f Cyan "@@@@"
+
     $branchRoot = "refs/heads/" + $stackInfo.Template
     $pullRequestLinks = "### Links to Stacked Pull Requests: `n"
     foreach($pullRequest in $pullRequests)
@@ -1645,7 +1799,15 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             $jsonPatch = @{}
             $jsonPatch.Add('status', '"completed"')
             $jsonPatch.Add('lastMergeSourceCommit', '{ "commitId": "' + $lastCommitId + '" } ')
-            patch_pull_request $pullRequest $jsonPatch
+
+            if((is_github))
+            {
+                complete_pull_request_github $pullRequest
+            }
+            else
+            {
+                patch_pull_request $pullRequest $jsonPatch
+            }
 
             # VSTS markdown will automatically add links to Pull Requests if the IDs
             # are prefixed with an exclamation point, e.g.: !123456
@@ -1665,24 +1827,45 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
     $postData.reviewers = get_default_reviewers
 
     write-host "Creating new pull request '"$postData.title"'"
-    $createPullReqeustUri = get_api_url "pullRequests"
-    $jsonText = ConvertTo-Json -InputObject  $postData
-    $error.Clear()
-    $result = Invoke-RestMethod -Uri $createPullReqeustUri -Method POST -Body $jsonText -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
-    if($error.Count -eq 0)
+
+    if(is_github)
     {
-        write-host "Created pull request with id: "$result."pullRequestId"
-        $pullRequest = rest_get($result."url")
-        $remoteWebUrl = $pullRequest."repository"."remoteUrl"
-        $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
-        open_url $remoteWebUrl
+        $repoInfo = get_repository_info_github
+
+        $arguments = @{
+            repoId = $repoInfo.repository.id
+            title = $postData.title
+            body = $postData.description
+            source = $postData.sourceRefName
+            target = $postData.targetRefName
+        }
+
+        # TODO : figure out how to add reviewers
+
+        $response = create_pull_request_github @arguments
+        # TODO : check for Errors in the response
     }
     else
     {
-        write-host -ForegroundColor Red "There were problems trying to create the final pull request"
-        write-host $result
-        write-host -ForegroundColor Yellow "The local branches for this stack will NOT be deleted"
-        return
+        $createPullReqeustUri = get_api_url "pullRequests"
+        $jsonText = ConvertTo-Json -InputObject  $postData
+        $error.Clear()
+        $result = Invoke-RestMethod -Uri $createPullReqeustUri -Method POST -Body $jsonText -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
+        if($error.Count -eq 0)
+        {
+            write-host "Created pull request with id: "$result."pullRequestId"
+            $pullRequest = rest_get($result."url")
+            $remoteWebUrl = $pullRequest."repository"."remoteUrl"
+            $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
+            [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+        }
+        else
+        {
+            write-host -ForegroundColor Red "There were problems trying to create the final pull request"
+            write-host $result
+            write-host -ForegroundColor Yellow "The local branches for this stack will NOT be deleted"
+            return
+        }
     }
 
     if ($deleteFlag -eq "-d")
@@ -1712,7 +1895,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
 function ssupdate($startNumber)
 {
     $stackInfo = get_stack_info
-    if($startNumber -eq $null)
+    if($null -eq $startNumber)
     {
         $startNumber = 1
     }
@@ -1793,7 +1976,7 @@ function sspush($force)
     # see if the pull request exists
     $query = "&status=active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$currentBranch")
-    $pullRequests = get_pull_requests($query)
+    $pullRequests = @(get_pull_requests($query))
 
     if($pullRequests.Count -gt 1)
     {
