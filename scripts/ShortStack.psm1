@@ -1766,7 +1766,7 @@ function ssupdate($startNumber)
 }
 
 #-----------------------------------------------------------------------------
-# Push currently created work and bring up VSTS do you can create a PR
+# Push currently created work and open a web browser to the repo
 #-----------------------------------------------------------------------------
 function sspush($force)
 {
@@ -1991,7 +1991,7 @@ function sstest()
 }
 
 #-----------------------------------------------------------------------------
-# Push currently created work and bring up VSTS do you can create a PR
+# Push currently created work and open a web browser to the repo
 #-----------------------------------------------------------------------------
 function ss()
 {
