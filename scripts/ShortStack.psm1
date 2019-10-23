@@ -991,8 +991,8 @@ function patch_pull_request($pullRequest, $patchDictionary)
     }
     $jsonPatch += "}"
 
-    write-host -f DarkGray "PATCH:"
-    write-host -f DarkGray ($jsonPatch)
+    #write-host -f DarkGray "PATCH:"
+    #write-host -f DarkGray ($jsonPatch)
 
     $result = rest_patch $pullRequest $jsonPatch
 }
