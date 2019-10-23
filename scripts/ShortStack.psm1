@@ -868,11 +868,11 @@ function Get-VSTSUserGuids
 }
 
 #-----------------------------------------------------------------------------
-# Open up the current git project in VSTS
+# Open up the current git project in the web browser
 #-----------------------------------------------------------------------------
-function govsts
+function goweb
 {
-    $url = git config --get remote.origin.url
+    $url = get_remote_url
     open_url $url
 }
 
@@ -1079,8 +1079,8 @@ function sshelp_commands
     write-host "         Starting at the remote origin at the top of the stack, resolve all diverging changes."
     write-host -ForegroundColor white "    ss status"
     write-host "         Show the status of the current stack"
-    write-host -ForegroundColor white "    govsts"
-    write-host "         Open the VSTS web page for this repository"
+    write-host -ForegroundColor white "    goweb"
+    write-host "         Open the web page for this repository"
     write-host -ForegroundColor white "    Get-VSTSUserGuids"
     write-host "         Show the VSTS user ids that are active in this repository (useful for default reviewer file)"
 
@@ -2030,7 +2030,7 @@ function ss()
 export-modulemember -function ss
 
 #some extra helper functions
-export-modulemember -function govsts
+export-modulemember -function goweb
 export-modulemember -function Get-VSTSUserGuids
 export-modulemember -function zz
 
