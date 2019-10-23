@@ -4,15 +4,15 @@
 #
 # This is a powershell module to enable a stacked pull request worflow.  Stacked pull
 # requests are  useful because they allow you to break up a big change
-# into easier-to-digest chunks that will get more useful review comments. 
+# into easier-to-digest chunks that will get more useful review comments.
 #
 # Note:  this is a work in progress.  My goal is to automate most of this with
-#        command-line tools and possibly in a VS extension.  
+#        command-line tools and possibly in a VS extension.
 #
 # =====================================================================================
 
 # Strict mode helps us locate syntax errors that would normally be silent
-Set-StrictMode -version Latest     
+Set-StrictMode -version Latest
 
 # For messing with rest calls and urls
 Add-Type -AssemblyName System.Web
@@ -22,14 +22,14 @@ Add-Type -AssemblyName System.Web
 #-----------------------------------------------------------------------------
 function get_origin($branch)
 {
-     $lines = git remote show origin -n 
+     $lines = git remote show origin -n
      $regex = (new-object System.Text.RegularExpressions.Regex "$branch +merges with remote (.*)")
      foreach($line in $lines)
      {
-        $match = $regex.Match($line)  
+        $match = $regex.Match($line)
         if($match.Success) {
             return $match.Groups[1].Value.Trim()
-        }  
+        }
     }
     return $null
 }
@@ -66,7 +66,7 @@ function get_stack_info($stackName)
         $output.IsStacked = $false
         return $output
     }
-    
+
     $output.Name = $match.Groups[3].ToString()
     $output.Number = ([int]($match.Groups[4].ToString()))
     $output.Origin = get_origin $currentBranch
@@ -82,14 +82,14 @@ function get_stack_info($stackName)
     $highestBranchNumber = -1
     foreach($localBranch in $localBranches)
     {
-        $match = $regex.Match($localBranch)  
+        $match = $regex.Match($localBranch)
         if($match.Success) {
             $branchNumber = ([int]($match.Groups[1].ToString()))
             if($highestBranchNumber -lt $branchNumber)
             {
                 $highestBranchNumber = $branchNumber
             }
-        }      
+        }
     }
     $output.LastBranchNumber = $highestBranchNumber
 
@@ -195,7 +195,7 @@ function query_github([string]$query)
         $escaped = escape_github_query $query
         #write-host -f Yellow $query
         #write-host -f DarkGray "POST:"
-        #write-host -f DarkGray $escaped 
+        #write-host -f DarkGray $escaped
 
         $response = ((Invoke-RestMethod `
         -Uri "https://api.github.com/graphql" `
@@ -246,11 +246,38 @@ function rest_get($uri)
 {
     $error.Clear()
     $output = Invoke-RestMethod -Uri $uri -Method Get -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
-    
+
     if($error.Count -gt 0)
     {
         show_web_error
-        return ,@()      
+        return ,@()
+    }
+
+    return ,$output
+}
+
+#-----------------------------------------------------------------------------
+# Generic function for making a rest PATCH call for GitHub
+#-----------------------------------------------------------------------------
+function rest_patch_github($pullRequest, $jsonDocument)
+{
+    $id = $pullRequest.id
+    $body = ($jsonDocument | ConvertFrom-Json).description
+    update_pull_request_body_github $id $body
+}
+
+#-----------------------------------------------------------------------------
+# Generic function for making a rest PATCH call for VSTS
+#-----------------------------------------------------------------------------
+function rest_patch_vsts($uri, $jsonDocument)
+{
+    $error.Clear()
+    $output = Invoke-RestMethod -Uri $uri -Method PATCH -Body $jsonDocument -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
+
+    if($error.Count -gt 0)
+    {
+        show_web_error
+        return ,@()
     }
 
     return ,$output
@@ -259,18 +286,18 @@ function rest_get($uri)
 #-----------------------------------------------------------------------------
 # Generic function for making a rest PATCH call
 #-----------------------------------------------------------------------------
-function rest_patch($uri, $jsonDocument)
+function rest_patch($pullRequest, $jsonDocument)
 {
-    $error.Clear()
-    $output = Invoke-RestMethod -Uri $uri -Method PATCH -Body $jsonDocument -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
-    
-    if($error.Count -gt 0)
+    if ((is_github))
     {
-        show_web_error
-        return ,@()      
+        rest_patch_github $pullRequest $jsonDocument
     }
-
-    return ,$output
+    else
+    {
+        $urlSuffix = "pullrequests/" + $pullRequest."pullrequestId"
+        $apiUrl = get_api_url $urlSuffix
+        rest_patch_vsts $apiUrl $jsonDocument
+    }
 }
 
 function get_remote_url_parts_github($webUrl)
@@ -291,7 +318,7 @@ function get_remote_url_parts_github($webUrl)
     {
         $output.BadUrl = $true
     }
-    return $output    
+    return $output
 }
 
 #-----------------------------------------------------------------------------
@@ -325,7 +352,7 @@ function get_remote_url_parts
 
     # VSTS urls take the form "https://Organization.visualstudio.com/DefaultCollection/ProjectName/_git/RepositoryName"
     $partMatch = [regex]::Match($webUrl, "^https://(.+?)\.([^/]+)/([^/]+)?(/[^/]+)?/_git(/[^/]+)?")
-  
+
     $output.FullUrl = $webUrl
     $output.BadUrl = $false
     if($partMatch.Success)
@@ -373,15 +400,15 @@ function get_api_url($api, $query)
             write-host -ForegroundColor Red "ERROR: the web url is in an unrecognized format:" $parts.FullUrl
             return ""
         }
-    
+
         $server = $parts.Server
         $host = $parts.Host
         $collection = $parts.Collection
         $project = $parts.Project
         $repository = $parts.Repository
-    
+
         $apiUrl = "https://$server.$host/$collection/$project/_apis/git/repositories/$repository"
-    
+
         return $apiUrl + "/$api" +"?api-version=3.0" + $query
     }
 }
@@ -415,15 +442,38 @@ query {
                     edges {
                         node {
                             baseRefName
+                            body
                             headRefName
-                            url
-                            title
+                            id
+                            number
                             state
+                            title
+                            url
                         }
                     }
                 }
             }
         }
+    }
+}
+"@
+    query_github $query
+}
+
+
+#-----------------------------------------------------------------------------
+# Update the body/description of a pull request on GitHub
+#-----------------------------------------------------------------------------
+function update_pull_request_body_github($id, $body)
+{
+    $query = @"
+mutation UpdateBody {
+    updatePullRequest(
+        input:{
+            pullRequestId:"$id"
+            body:"$body"
+        }) {
+        clientMutationId
     }
 }
 "@
@@ -459,7 +509,17 @@ function filter_github_pull_requests($queryResults, $refName, $state)
     $pullRequests = @()
     $pullRequests += $result.repository.refs.nodes.associatedPullRequests.edges.node
                 | where-object { $_.state -ieq $state -and $_.headRefName -ieq $refName }
-                | select-object -Property @{Name='status'; Expression={$_.state}}, headRefName, baseRefName, url, title
+                | select-object -Property `
+                    @{Name='pullrequestId'; Expression={$_.id}}, `
+                    @{Name='status'; Expression={$_.state}}, `
+                    @{Name='description'; Expression={$_.body}}, `
+                    baseRefName, `
+                    headRefName, `
+                    id, `
+                    body, `
+                    state, `
+                    title, `
+                    url `
 
     # comma (to array) operator is necessary to avoid 'property 'Count' cannot be found on this object' errors.
     ,$pullRequests
@@ -468,7 +528,7 @@ function filter_github_pull_requests($queryResults, $refName, $state)
 #-----------------------------------------------------------------------------
 # Get all the pull requests that match the query
 #-----------------------------------------------------------------------------
-function get_pull_requests($query) 
+function get_pull_requests($query)
 {
     if ((is_github))
     {
@@ -497,8 +557,8 @@ function get_pull_requests($query)
 #-----------------------------------------------------------------------------
 # Get the pull request associated with this stack branch
 #-----------------------------------------------------------------------------
-function get_current_pull_request() 
-{    
+function get_current_pull_request()
+{
     $stackInfo = get_stack_info
     if(!$stackInfo.IsStacked)
     {
@@ -513,9 +573,9 @@ function get_current_pull_request()
 #-----------------------------------------------------------------------------
 # Get all the commits that match the query
 #-----------------------------------------------------------------------------
-function get_commits($remoteBranch, $numberToGet) 
-{    
-    if($numberToGet -eq $null)
+function get_commits($remoteBranch, $numberToGet)
+{
+    if($null -eq $numberToGet)
     {
         $numberToGet = 5
     }
@@ -526,7 +586,7 @@ function get_commits($remoteBranch, $numberToGet)
     $query = "&branch=" + [System.Web.HttpUtility]::UrlEncode($remoteBranch)
     $query += '&$top=' + $numberToGet
     $getPullRequestsUri = get_api_url "commits" $query
-    
+
     return @((rest_get($getPullRequestsUri))."value");
 }
 
@@ -535,7 +595,7 @@ function get_commits($remoteBranch, $numberToGet)
 # Get a summary of all commit comments
 #-----------------------------------------------------------------------------
 function get_unpushed_commit_summary($stackLevel)
-{   
+{
     $stackInfo = get_stack_info
     if(!$stackInfo.IsStacked)
     {
@@ -544,16 +604,16 @@ function get_unpushed_commit_summary($stackLevel)
         return $output
     }
 
-    if($stackLevel -eq $null)
+    if($null -eq $stackLevel)
     {
         $stackLevel = $stackInfo.Number
     }
 
-    $sourceBranch = $stackInfo.template + $stackLevel.ToString("00")  
+    $sourceBranch = $stackInfo.template + $stackLevel.ToString("00")
     $destinationBranch = "origin/" + $sourceBranch
 
     #use cherry to find the commits not in the destination branch
-    $commitLines =  git cherry -v  $destinationBranch $sourceBranch 
+    $commitLines =  git cherry -v  $destinationBranch $sourceBranch
     $output = @{}
     $commitCount = 0
     [System.Collections.ArrayList]$commentLines = @()
@@ -567,11 +627,11 @@ function get_unpushed_commit_summary($stackLevel)
             $showLines = git show $partMatch.Groups[1].Value
             for($i=4; $i -lt $showLines.Count; $i++)
             {
-                if($showLines[$i] -eq "") 
+                if($showLines[$i] -eq "")
                 {
                     break
                 }
-                [void]$commentLines.Add($showLines[$i].Trim()) 
+                [void]$commentLines.Add($showLines[$i].Trim())
             }
         }
     }
@@ -585,7 +645,7 @@ function get_unpushed_commit_summary($stackLevel)
 #-----------------------------------------------------------------------------
 function make_stackbranch_name($name, $number)
 {
-    return "users/$env:username/" + $name + "_" + $number.ToString("00") 
+    return "users/$env:username/" + $name + "_" + $number.ToString("00")
 }
 
 #-----------------------------------------------------------------------------
@@ -622,10 +682,10 @@ function lineset_has_regex_match($lines, $regexPattern)
     {
         if($regex.Match($line).Success) {
             return $true
-        }  
+        }
     }
-    return $false 
-    
+    return $false
+
 }
 
 #-----------------------------------------------------------------------------
@@ -657,20 +717,20 @@ function git_pull($originBranch)
     $originBranch = $originBranch -ireplace '^origin/', ''
 
     git pull origin $originBranch *>&1 | %{
-        $match = (new-object System.Text.RegularExpressions.Regex "^CONFLICT").Match($_)  
+        $match = (new-object System.Text.RegularExpressions.Regex "^CONFLICT").Match($_)
         if($match.Success) {
             [void]$conflicts.Add($_)
             $output.IsSuccessful = $false
-        }  
-        $match = (new-object System.Text.RegularExpressions.Regex "^error:").Match($_)  
+        }
+        $match = (new-object System.Text.RegularExpressions.Regex "^error:").Match($_)
         if($match.Success) {
             [void]$errors.Add($_)
             $output.IsSuccessful = $false
-        }  
-        $match = (new-object System.Text.RegularExpressions.Regex "Already up to date").Match($_)  
+        }
+        $match = (new-object System.Text.RegularExpressions.Regex "Already up to date").Match($_)
         if($match.Success) {
             $output.AlreadyUpToDate = $true
-        }  
+        }
     }
 
     $output.Conflicts = $conflicts
@@ -692,20 +752,20 @@ function git_push($dest, $source)
     [System.Collections.ArrayList]$errors = @()
 
     # git push is weird is returns everything in stderr
-    $commandOutput = git push $dest $source *>&1 | Out-String 
+    $commandOutput = git push $dest $source *>&1 | Out-String
     $lineOutput =(-Join $commandOutput).Split("`n")
 
     foreach($line in $lineOutput)
     {
-        $match = (new-object System.Text.RegularExpressions.Regex "^(error|hint|git : fatal:):").Match($line)  
+        $match = (new-object System.Text.RegularExpressions.Regex "^(error|hint|git : fatal:):").Match($line)
         if($match.Success) {
             [void]$errors.Add($line)
             $output.IsSuccessful = $false
-        }  
-        $match = (new-object System.Text.RegularExpressions.Regex "up-to-date").Match($line)  
+        }
+        $match = (new-object System.Text.RegularExpressions.Regex "up-to-date").Match($line)
         if($match.Success) {
             $output.AlreadyUpToDate = $true
-        }         
+        }
     }
 
     $output.Conflicts = $conflicts
@@ -723,16 +783,15 @@ function git_checkout($branch)
     $output = @{}
     $output.gitCommand = "checkout"
     $output.IsSuccessful = $true
-    [System.Collections.ArrayList]$conflicts = @()
     [System.Collections.ArrayList]$errors = @()
 
     git checkout $branch *>&1 | %{
-        $match = (new-object System.Text.RegularExpressions.Regex "^error:").Match($_)  
+        $match = (new-object System.Text.RegularExpressions.Regex "^error:").Match($_)
         if($match.Success) {
             $output.IsSuccessful = $false
             [void]$errors.Add($_)
             return $output
-        }  
+        }
     }
 
     return $output
@@ -760,7 +819,7 @@ function get_vsts_auth_header
 
         if($tokensExist)
         {
-             if( $VSTSTokens[$parts.Server] -ne $null)
+             if($null -eq $VSTSTokens[$parts.Server])
              {
                  $authBytes = [Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f "",$VSTSTokens[$parts.Server]))
              }
@@ -772,7 +831,7 @@ function get_vsts_auth_header
         }
         else
         {
-            if($VSTSPersonalAccessToken -eq $null)
+            if($null -eq $VSTSPersonalAccessToken)
             {
                 write-host -ForegroundColor red "Error: No VSTS access token found. "
                 return ""
@@ -788,9 +847,9 @@ function get_vsts_auth_header
 #-----------------------------------------------------------------------------
 # Open up the current git project in VSTS
 #-----------------------------------------------------------------------------
-function Get-VSTSUserGuids 
+function Get-VSTSUserGuids
 {
-    $response = get_pull_requests("") 
+    $response = get_pull_requests("")
 
     $output = [ordered]@{}
     foreach($request in $response)
@@ -811,7 +870,7 @@ function Get-VSTSUserGuids
 #-----------------------------------------------------------------------------
 # Open up the current git project in VSTS
 #-----------------------------------------------------------------------------
-function govsts 
+function govsts
 {
     $url = git config --get remote.origin.url
     open_url $url
@@ -830,7 +889,7 @@ function get_default_reviewers
         $parts = $line.Trim().Split("=",2)
         if($parts.Count -eq 2)
         {
-            $name = $parts[0].ToLower()
+            #$name = $parts[0].ToLower()
             if($parts[0].ToLower() -eq "reviewerid")
             {
                 $newReviewer = @{}
@@ -879,7 +938,7 @@ function warn_on_dangling_work
     if(environment_has_unpushed_changes)
     {
         write-host -ForegroundColor Yellow "WARNING: There are unpushed commits"
-        write-host -ForegroundColor Yellow "(Current branch is $currentBranch)" 
+        write-host -ForegroundColor Yellow "(Current branch is $currentBranch)"
     }
     return $false
 }
@@ -925,17 +984,17 @@ function patch_pull_request($pullRequest, $patchDictionary)
 {
     $jsonPatch = "{"
     $separator = ""
-    foreach ($item in $patchDictionary.GetEnumerator()) 
+    foreach ($item in $patchDictionary.GetEnumerator())
     {
         $jsonPatch += $separator + '"' + $item.Name + '":' + $item.Value
         $separator = ","
     }
     $jsonPatch += "}"
 
-    #write-host "PATCH: $jsonPatch"
-    $urlSuffix = "pullrequests/" + $pullRequest."pullrequestId"
-    $apiUrl = get_api_url $urlSuffix
-    $result = rest_patch $apiUrl $jsonPatch
+    write-host -f DarkGray "PATCH:"
+    write-host -f DarkGray ($jsonPatch)
+
+    $result = rest_patch $pullRequest $jsonPatch
 }
 
 #-----------------------------------------------------------------------------
@@ -946,7 +1005,7 @@ function check_for_good_git_result($result)
 {
     if($result.IsSuccessful -ne $true)
     {
-        write-host -ForegroundColor Red "Error: There were problems with git "$result.gitCommand 
+        write-host -ForegroundColor Red "Error: There were problems with git "$result.gitCommand
         foreach($error in $result.Errors)
         {
             write-host -ForegroundColor Red  "  $error"
@@ -986,7 +1045,7 @@ function zz($a, $b, $c)
 function sshelp_main
 {
     write-host "ShortStack is a tool for handling a stacked pull request workflow."
-    write-host 
+    write-host
     write-host "for more information:"
     write-host -NoNewLine -ForegroundColor white "    ss help commands      "
     write-host "Show available commands"
@@ -1095,7 +1154,7 @@ function sshelp_setup
     {
         show_vsts_token_help -indent:8
     }
-    
+
     write-host
     write-host "    3) Include the posh-git module in your environment by loading it from your profile:"
     write-host '           mkdir C:\Users\$env:username\Documents\WindowsPowerShell'
@@ -1110,9 +1169,9 @@ function sshelp_setup
     write-host '    4) Reload your profile: '
     write-host '            . $profile'
     write-host ""
-    write-host "    5) Create a default reviewers file:" 
+    write-host "    5) Create a default reviewers file:"
     write-host '        - Create the file "stackprefs.txt" in your .git folder'
-    write-host "        - run 'Get-VSTSUserGuids' to see the user id's" 
+    write-host "        - run 'Get-VSTSUserGuids' to see the user id's"
     write-host '        - for each reviewer you want to include, add this line:'
     write-host '            reviewerid=(vsts_guid_of_user)'
     write-host "          (lines starting with '#' are treated as comments)"
@@ -1155,7 +1214,7 @@ function ssstatus
         return
     }
 
-    write-host -ForegroundColor White "============== STACK STATUS ================== "    
+    write-host -ForegroundColor White "============== STACK STATUS ================== "
 
     for($i = 1; $i -lt 1000; $i++)
     {
@@ -1208,14 +1267,14 @@ function ssstatus
         else
         {
             $color = $defaultColor
-            $status = $representativePullRequest."status" 
+            $status = $representativePullRequest."status"
             if($status -eq "Active")
             {
                 $color = "Yellow"
             }
             write-host -ForegroundColor $color "   $unpushedStatus "$representativePullRequest."title"
         }
-    }   
+    }
 }
 
 
@@ -1263,7 +1322,7 @@ function ssabandon
     {
         if(($pullRequest."sourceRefName").StartsWith($branchRoot))
         {
-            write-host "Abandoning pull request" $pullRequest."pullrequestId" $pullRequest."title" 
+            write-host "Abandoning pull request" $pullRequest."pullrequestId" $pullRequest."title"
             patch_pull_request $pullRequest @{"description" =  json_encode "abandoned"}
         }
     }
@@ -1274,11 +1333,11 @@ function ssabandon
         $branchName = make_stackbranch_name $stackInfo.Name $i
         if($localBranches.Contains("  $branchName") -Or $localBranches.Contains("* $branchName"))
         {
-            write-host "Deleting branch $branchName" 
+            write-host "Deleting branch $branchName"
             git branch -D $branchName
         }
     }
-    
+
     write-host "DONE"
 }
 
@@ -1290,7 +1349,7 @@ function ssabandon
 #
 # You only need to provide the arguments when starting a stack.  If no
 # arguments are provided, then a new branch is created to stack on top of
-# the current branch.  
+# the current branch.
 #-----------------------------------------------------------------------------
 function ssgo($number, $stackName)
 {
@@ -1299,14 +1358,14 @@ function ssgo($number, $stackName)
     switch -Regex ($number)
     {
         $null { $number = -1 }
-        '^[0-9]+$' { } 
+        '^[0-9]+$' { }
         'last' { $number = -1; }
         'first' { $number = 0 }
-        default { 
+        default {
             $temp = $stackName
-            $stackName = $number; 
+            $stackName = $number;
             $number = $temp;
-        } 
+        }
     }
 
     $stackInfo = get_stack_info $stackName
@@ -1346,10 +1405,10 @@ function ssgo($number, $stackName)
     if(warn_on_dangling_work)
     {
         write-host -ForegroundColor DarkYellow "To force the branch change anyway, type:   git checkout $targetBranch"
-        return       
+        return
     }
 
-    $null = git checkout $targetBranch 
+    $null = git checkout $targetBranch
 }
 
 
@@ -1361,13 +1420,13 @@ function ssgo($number, $stackName)
 #
 # You only need to provide the arguments when starting a stack.  If no
 # arguments are provided, then a new branch is created to stack on top of
-# the current branch.  
+# the current branch.
 #-----------------------------------------------------------------------------
 function ssnew($name, $desiredOrigin)
 {
     if(warn_on_dangling_work)
     {
-        return       
+        return
     }
 
     $number = 0
@@ -1380,7 +1439,7 @@ function ssnew($name, $desiredOrigin)
         Write-host "Current branch is not a stacked branch.  To start a stack:  ss new (name) (origin branch to track)"
         return
     }
-    
+
     # if this is an active stack, then override the desired origin with the last branch
     if($stackInfo.Origin -ne $null)
     {
@@ -1394,26 +1453,26 @@ function ssnew($name, $desiredOrigin)
     }
 
     $name = $stackInfo.Name
-    $number = $stackInfo.LastBranchNumber + 1      
-    
+    $number = $stackInfo.LastBranchNumber + 1
+
     # If we still don't have an origin, default to master
     if($origin -eq $null)
     {
         $origin = "master"
     }
-    
+
     # Make sure we are tracking something from the server
     if($origin.StartsWith("origin/") -eq $false)
     {
         $origin = "origin/$origin"
     }
-    
-    $newBranch = make_stackbranch_name $name $number 
+
+    $newBranch = make_stackbranch_name $name $number
 
     # for new stacks, we need to create a "zero" branch to isolate the
-    # stack from the tracked branch.  This is because the tracked 
+    # stack from the tracked branch.  This is because the tracked
     # branch usually has policies that prevent us from automatically
-    # completing and commiting pull requests when we are finished.  
+    # completing and commiting pull requests when we are finished.
     if($number -eq 0)
     {
         write-host -ForegroundColor Gray "Creating branch 'zero' branch to track $origin ..."
@@ -1426,17 +1485,17 @@ function ssnew($name, $desiredOrigin)
 
         $origin = "origin/$newbranch"
         $number++
-        $newBranch = make_stackbranch_name $name $number 
+        $newBranch = make_stackbranch_name $name $number
     }
-    
+
     write-host -ForegroundColor White "Creating branch $newBranch to track $origin ..."
     git branch $newBranch --track $origin *> $null
     git checkout $newBranch   *> $null
-   
+
     write-host "Synchronizing with tracking branch..."
     $pullResult = git_pull $origin
     [void](check_for_good_git_result $pullResult)
-   
+
 
     #create the upstream branch
     write-host "Creating remote version of $newBranch"
@@ -1471,15 +1530,15 @@ function sslist($name, $desiredOrigin)
             {
                 $null = $output.Add($name);
             }
-        }  
+        }
     }
-    
+
     if($output.Count -eq 0)
     {
         write-host "There are no stacks in this repository"
         return
     }
-    
+
     write-host "Found these stacks:"
     foreach($name in $output)
     {
@@ -1488,7 +1547,7 @@ function sslist($name, $desiredOrigin)
 }
 
 #-----------------------------------------------------------------------------
-# This will wrap up the entire stack and prepare a final pull request 
+# This will wrap up the entire stack and prepare a final pull request
 # with all the changes in it
 #-----------------------------------------------------------------------------
 function ssfinish($name, $desiredOrigin, $deleteFlag)
@@ -1507,15 +1566,15 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
     # don't finish if there are uncommitted changes
     if(warn_on_dangling_work)
     {
-        return       
+        return
     }
 
     # ask the user for confirmation
     write-host -ForegroundColor Yellow "WARNING: This command will delete local stacked branches and mark all pull requests as complete."
     write-host "It is assumed you have run the following:"
-    write-host -NoNewLine -ForegroundColor White "SS UPDATE 0" 
+    write-host -NoNewLine -ForegroundColor White "SS UPDATE 0"
     write-host "   - to make sure everything has been pushed"
-    write-host -NoNewLine -ForegroundColor White "SS STATUS" 
+    write-host -NoNewLine -ForegroundColor White "SS STATUS"
     write-host "   - to make sure you have pull requests in place."
     write-host -ForegroundColor DarkYellow "Do you wish to continue?"
 
@@ -1602,12 +1661,12 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
     $postData.sourceRefName = "refs/heads/$finishBranch"
     $postData.targetRefName = "refs/heads/$rootOrigin"
     $postData.title = "Completion of " +$stackInfo.Name
-    $postData.description = $description + "`n`n" + $pullRequestLinks   
+    $postData.description = $description + "`n`n" + $pullRequestLinks
     $postData.reviewers = get_default_reviewers
 
     write-host "Creating new pull request '"$postData.title"'"
     $createPullReqeustUri = get_api_url "pullRequests"
-    $jsonText = ConvertTo-Json -InputObject  $postData 
+    $jsonText = ConvertTo-Json -InputObject  $postData
     $error.Clear()
     $result = Invoke-RestMethod -Uri $createPullReqeustUri -Method POST -Body $jsonText -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
     if($error.Count -eq 0)
@@ -1635,12 +1694,12 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             $branchName = make_stackbranch_name $stackInfo.Name $i
             if($localBranches.Contains("  $branchName") -Or $localBranches.Contains("* $branchName"))
             {
-                write-host "Deleting branch $branchName" 
+                write-host "Deleting branch $branchName"
                 $null = git branch -D $branchName
             }
         }
     }
-    
+
     write-host -ForegroundColor Green "DONE"
 }
 
@@ -1668,9 +1727,9 @@ function ssupdate($startNumber)
     {
         if(warn_on_dangling_work)
         {
-            return       
+            return
         }
-       
+
         write-host "Checking stack level $stackNumber"
         $branchName = make_stackbranch_name $stackInfo.Name $stackNumber
         $checkoutResult = git_checkout $branchName
@@ -1684,8 +1743,8 @@ function ssupdate($startNumber)
         if(current_branch_has_diverged)
         {
             $originBranch = "origin/" + $currentStackInfo.Origin
-            write-host "  Pulling changes from " $originBranch 
-            $pullResult = git_pull $originBranch 
+            write-host "  Pulling changes from " $originBranch
+            $pullResult = git_pull $originBranch
             if(!(check_for_good_git_result $pullResult))
             {
                 return;
@@ -1730,12 +1789,12 @@ function sspush($force)
     {
         $commitDescription = $commitDescription +  $unpushedCommits.Lines[$i] + "`n"
     }
-  
+
     # see if the pull request exists
     $query = "&status=active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$currentBranch")
     $pullRequests = get_pull_requests($query)
-            
+
     if($pullRequests.Count -gt 1)
     {
         write-host -ForegroundColor Red "******* ERROR *********"
@@ -1758,18 +1817,19 @@ function sspush($force)
         }
 
         write-host "Pushing changes up to $currentBranch..."
-        $pushresult = git_push origin $currentBranch 
+        $pushresult = git_push origin $currentBranch
         if(!(check_for_good_git_result $pushResult))
         {
             throw "Git push failed."
         }
 
         $newDescription = $firstLine + "`n" + $commitDescription
+
         if(Get-Member -inputobject $pullRequests[0] -name "description" -Membertype Properties)
-        { 
-            $newDescription =  $pullRequests[0]."description" + $newDescription
+        {
+            $newDescription =  $pullRequests[0]."description" + "`n" + $newDescription
         }
-        
+
         patch_pull_request $pullRequests[0] @{"description" = json_encode $newDescription}
 
         write-host "Updated existing pull request for $currentBranch"
@@ -1777,7 +1837,7 @@ function sspush($force)
     }
 
     write-host "Pushing changes up to $currentBranch..."
-    $pushresult = git_push origin $currentBranch 
+    $pushresult = git_push origin $currentBranch
     if(!(check_for_good_git_result $pushResult))
     {
         throw "Git push failed."
@@ -1786,17 +1846,17 @@ function sspush($force)
     # No pull request exists at this point, so let's create one
     $branchinfo = git status -sb
     $targetBranch = [regex]::Match($branchInfo, "origin/(.+?) ").Groups[1].Value
-    if($targetBranch -eq "" -or $targetBranch -eq $null)
+    if($targetBranch -eq "" -or $null -eq $targetBranch)
     {
-        throw "Uh-oh.  Target branch could not be determined. Have you committed any changes?"    
+        throw "Uh-oh.  Target branch could not be determined. Have you committed any changes?"
     }
 
     $createPullReqeustUri = get_api_url "pullRequests"
-   
-    # Use the commit comments to create a title and description.  
+
+    # Use the commit comments to create a title and description.
     # First line is the title, the rest is the description
     $description = $commitDescription
-    
+
     $title = $firstLine
     if($title -eq "")
     {
@@ -1806,10 +1866,10 @@ function sspush($force)
     $postData.sourceRefName = "refs/heads/$currentBranch"
     $postData.targetRefName = "refs/heads/$targetBranch"
     $postData.title = $stackInfo.Name + "_" + $stackInfo.Number.ToString("00") + ": " + $title
-    $postData.description = $description   
+    $postData.description = $description
     $postData.reviewers = get_default_reviewers
-    
-    if ($postData.reviewers.Count -eq 0) 
+
+    if ($postData.reviewers.Count -eq 0)
     {
         write-host -ForegroundColor Yellow "WARNING:  No default reviewers specified."
         write-host -ForegroundColor White 'How to specify default reviewers:'
@@ -1819,15 +1879,15 @@ function sspush($force)
         write-host '       (lines starting with '#' are treated as comments)
         write-host 'To see a list of availble user guids, type "Get-VSTSUserGuids"'
     }
-   
+
     write-host "Creating new pull request '"$postData.title"'"
-    $jsonText = ConvertTo-Json -InputObject  $postData 
+    $jsonText = ConvertTo-Json -InputObject  $postData
+    write-host $jsonText
 
     $error.Clear()
-    try 
-    { 
-        $result = Invoke-RestMethod -Uri $createPullReqeustUri -Method POST -Body $jsonText -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
-        if($error.Count -eq 0)
+    try
+    {
+        if((is_github))
         {
             write-host "Created pull request with id: "$result."pullRequestId"
             $pullRequest = rest_get($result."url")
@@ -1837,15 +1897,27 @@ function sspush($force)
         }
         else
         {
-            Write-Host $error
+            $result = Invoke-RestMethod -Uri $createPullReqeustUri -Method POST -Body $jsonText -ContentType "application/json" -Headers @{Authorization=(get_vsts_auth_header)}
+            if($error.Count -eq 0)
+            {
+                write-host "Created pull request with id: "$result."pullRequestId"
+                $pullRequest = rest_get($result."url")
+                $remoteWebUrl = $pullRequest."repository"."remoteUrl"
+                $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
+                [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+            }
+            else
+            {
+                Write-Host $error
+            }
         }
-    } 
+    }
     catch
-    { 
+    {
         write-host -ForegroundColor Red "Push Error " $_
         write-host "Push data: " $jsonText
     }
-   
+
 }
 
 #-----------------------------------------------------------------------------
@@ -1871,7 +1943,7 @@ function sstest()
 
     bar "Move to Master"
     git checkout master
-    
+
     bar "Start New Stack"
     $name = (Get-Date).ToString("yyyyMMdd_HHmmss") + "_TEST"
     ssnew $name master
@@ -1891,7 +1963,7 @@ function sstest()
     $pullRequest = get_current_pull_request
     assert_equals "$($name)_01: A first change" $pullRequest."title"
     assert_equals "aaa`nbbb`n" $pullRequest."description"
-   
+
     bar "Additional commits should expand description"
     "// third comment" >> test.cs
     git commit -am "ccc"
@@ -1900,12 +1972,12 @@ function sstest()
     $pullRequest = get_current_pull_request
     assert_equals "$($name)_01: A first change" $pullRequest."title"
     assert_equals "aaa`nbbb`nccc`n" $pullRequest."description"
- 
+
     bar "ss new to create a new stack"
     ssnew
     "// line1" > test2.cs
     git add *
-    git commit -am "Test2"   
+    git commit -am "Test2"
     Start-Sleep -Milliseconds 1000
     sspush
     $pullRequest = get_current_pull_request
@@ -1929,7 +2001,7 @@ function ss()
         $option2,
         $option3,
         $option4
-    ) 
+    )
 
     Try
     {
@@ -1951,7 +2023,7 @@ function ss()
     Catch
     {
         write-host -ForegroundColor red  "ERROR: "$_.Exception.Message
-    }   
+    }
 }
 
 # Functions specifically for stacked pull requests
