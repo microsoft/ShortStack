@@ -288,6 +288,11 @@ function rest_patch_vsts($uri, $jsonDocument)
 #-----------------------------------------------------------------------------
 function rest_patch($pullRequest, $jsonDocument)
 {
+    if ($null -eq $pullRequest -or [string]::IsNullOrWhiteSpace($pullRequest))
+    {
+        throw "pullRequest is required"
+    }
+
     if ((is_github))
     {
         rest_patch_github $pullRequest $jsonDocument
@@ -630,7 +635,7 @@ function get_pull_requests($query)
     else # VSTS
     {
         #write-host -f DarkGray "Getting pull requests from VSTS"
-        @(get_pull_requests_vsts $query)
+        return @(get_pull_requests_vsts $query)
     }
 }
 
@@ -689,6 +694,8 @@ query {
 #-----------------------------------------------------------------------------
 function get_commits_vsts($remoteBranch, $numberToGet)
 {
+    write-host -f Cyan "remoteBranch: $remoteBranch"
+
     if($null -eq $numberToGet)
     {
         $numberToGet = 5
@@ -700,7 +707,7 @@ function get_commits_vsts($remoteBranch, $numberToGet)
     $query = "&branch=" + [System.Web.HttpUtility]::UrlEncode($remoteBranch)
     $query += '&$top=' + $numberToGet
     $getPullRequestsUri = get_api_url "commits" $query
-
+    write-host -f Cyan $getPullRequestsUri
     return @((rest_get($getPullRequestsUri))."value");
 }
 
@@ -1130,6 +1137,10 @@ function json_encode($text)
 #-----------------------------------------------------------------------------
 function patch_pull_request($pullRequest, $patchDictionary)
 {
+    write-host -f DarkGray "enter: patch_pull_request"
+    write-host -f DarkGray "pullRequest: $pullRequest"
+    write-host -f DarkGray "patchDictionary: $patchDictionary"
+
     $jsonPatch = "{"
     $separator = ""
     foreach ($item in $patchDictionary.GetEnumerator())
@@ -1765,10 +1776,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
     # Mark active pull requests as completed
     $query = "&status=active"
 
-    # Despite Herculean efforts to ensure PowerShell returns a zero-element array,
-    # we still have to wrap this in @() to ensure that it didn't just 'upgrade'
-    # the empty to null.
-    $pullRequests = @(get_pull_requests $query)
+    $pullRequests = get_pull_requests $query
     if($pullRequests.Count -eq 0)
     {
         write-host -ForegroundColor DarkYellow "No active pull requests for this stack, may indicate an issue with this operation."
@@ -1782,13 +1790,13 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             return
         }
     }
-    write-host -f Cyan "@@@@"
 
     $branchRoot = "refs/heads/" + $stackInfo.Template
     $pullRequestLinks = "### Links to Stacked Pull Requests: `n"
     foreach($pullRequest in $pullRequests)
     {
         $description += $pullRequest."title" + "`n"
+        write-host -f Magenta $pullRequest.sourceRefName
         $sourceBranch = $pullRequest."sourceRefName"
         $commits = get_commits $sourceBranch 2
         $lastCommitId = $commits[0]."commitId"
@@ -1857,7 +1865,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
             $pullRequest = rest_get($result."url")
             $remoteWebUrl = $pullRequest."repository"."remoteUrl"
             $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
-            [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+            open_url $remoteWebUrl
         }
         else
         {
@@ -1976,16 +1984,16 @@ function sspush($force)
     # see if the pull request exists
     $query = "&status=active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$currentBranch")
-    $pullRequests = @(get_pull_requests($query))
+    $pullRequests = get_pull_requests $query
 
-    if($pullRequests.Count -gt 1)
+    if($pullRequests -and $pullRequests[0] -and $pullRequests.Count -gt 1)
     {
         write-host -ForegroundColor Red "******* ERROR *********"
         write-host -ForegroundColor Red 'There is more than one pull request sourced from ' + $currentBranch
         write-host -ForegroundColor Red 'Type "govsts" to open vsts and resolve your active pull reqeusts.'
         return
     }
-    elseif($pullRequests.Count -eq 1)
+    elseif($pullRequests -and $pullRequests[0] -and $pullRequests.Count -eq 1)
     {
         if($force -ne "--force")
         {
@@ -2010,7 +2018,7 @@ function sspush($force)
 
         if(Get-Member -inputobject $pullRequests[0] -name "description" -Membertype Properties)
         {
-            $newDescription =  $pullRequests[0]."description" + "`n" + $newDescription
+            $newDescription =  ($pullRequests[0]."description").Trim() + "`n" + $newDescription
         }
 
         patch_pull_request $pullRequests[0] @{"description" = json_encode $newDescription}
@@ -2087,7 +2095,7 @@ function sspush($force)
                 $pullRequest = rest_get($result."url")
                 $remoteWebUrl = $pullRequest."repository"."remoteUrl"
                 $remoteWebUrl = $remoteWebUrl + "/pullrequest/" + $result."pullRequestId"
-                [System.Diagnostics.Process]::Start($remoteWebUrl) > $null
+                open_url $remoteWebUrl
             }
             else
             {
