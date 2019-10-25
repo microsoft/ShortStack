@@ -605,7 +605,6 @@ function filter_github_pull_requests($refName, $state, $queryResults)
         $pullRequests = $pullRequests | where-object {$_.headRefName -ieq $refName }
     }
 
-    write-host -f Yellow "filter_github_pull_requests"
     return @($pullRequests)
 }
 
@@ -616,7 +615,6 @@ function get_pull_requests($query)
 {
     if (is_github)
     {
-        write-host -f Yellow "get_pull_requests"
         #write-host -f DarkGray "Getting pull requests from GitHub"
         $results = get_pull_requests_github
         #write-host -f Cyan ($results | ConvertTo-Json -Depth 100)
@@ -736,7 +734,6 @@ function get_commits($remoteBranch, $numberToGet)
         }
 
         # comma (to array) operator is necessary to avoid 'property 'Count' cannot be found on this object' errors.
-        write-host -f Yellow "get_commits"
         @($commits)
     }
     else
