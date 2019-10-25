@@ -1436,27 +1436,48 @@ function ssstatus
     }
 }
 
+#-----------------------------------------------------------------------------
+# This will abandon all the PR's associated with all of the stacks
+#-----------------------------------------------------------------------------
+function ssabandonall($force)
+{
+    $branches = (get_toplevel_stack_branches)[0]
+    foreach ($branch in $branches) {
+        ssabandon $force
+    }
+}
 
 #-----------------------------------------------------------------------------
 # This will abandon all the PR's associated with the current stack
 #-----------------------------------------------------------------------------
-function ssabandon
+function ssabandon([switch]$all, $force)
 {
+    #write-host -f Cyan @PSBoundParameters
+    if($all) {
+        ssabandonall $force
+    }
+
     $stackInfo = get_stack_info
     if($stackInfo.IsStacked -ne $true)
     {
-        Write-host "Current branch is not a stacked branch.  To start a stack: ss new (name) (origin branch to track)"
+        write-host "Current branch is not a stacked branch.  To start a stack: ss new (name) (origin branch to track)"
         return
     }
 
-    write-host -ForegroundColor Yellow "WARNING: This will delete all local branches for this stack"
-    write-host -ForegroundColor Yellow "and abandon related pull requests.   Are you sure?"
+    write-host -ForegroundColor Yellow -NoNewline "WARNING: This will delete all local branches for the "
+    write-host -ForegroundColor Cyan $stackInfo.Name
+    write-host -ForegroundColor Yellow "stack and abandon related pull requests.  Are you sure?"
+    write-host -ForegroundColor Gray "(In the future, you can use --force to skip this question)."
 
-    $reply = Read-Host -Prompt "Type 'YES' to continue: "
-    if($reply -ne "YES")
+    if($force -ne "--force")
     {
-        write-host "OK, the bits will live to fight another day."
-        return
+        $reply = Read-Host -Prompt "Type 'YES' to continue: "
+
+        if($reply -ne "YES")
+        {
+            write-host "OK, the bits will live to fight another day."
+            return
+        }
     }
 
     $safeDirectory = GET-gitDirectory
@@ -1673,9 +1694,29 @@ function ssnew($name, $desiredOrigin)
 }
 
 #-----------------------------------------------------------------------------
+# Get a list of stack branches
+#-----------------------------------------------------------------------------
+function get_toplevel_stack_branches
+{
+    $output = [System.Collections.Generic.HashSet[string]]::new()
+    $regex = [System.Text.RegularExpressions.Regex]::new("..(.+?)/(.+?)/.+_00")
+    $lines = git branch
+
+    foreach($line in $lines)
+    {
+        $match = $regex.Match($line)
+        if($match.Success) {
+            $null = $output.Add($match.Groups[0].Value.TrimStart('*').Trim());
+        }
+    }
+
+    return ,$output
+}
+
+#-----------------------------------------------------------------------------
 # Show a list of available stacks
 #-----------------------------------------------------------------------------
-function sslist($name, $desiredOrigin)
+function sslist($name)
 {
     [System.Collections.ArrayList]$output = @()
     $lines = git branch
