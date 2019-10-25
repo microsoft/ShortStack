@@ -1461,7 +1461,7 @@ function ssstatus
 }
 
 #-----------------------------------------------------------------------------
-# This will abandon all the PR's associated with all of the stacks
+# This will abandon all the PRs associated with all of the stacks
 #-----------------------------------------------------------------------------
 function ssabandonall($force)
 {
@@ -1473,7 +1473,7 @@ function ssabandonall($force)
 }
 
 #-----------------------------------------------------------------------------
-# This will abandon all the PR's associated with the current stack
+# This will abandon all the PRs associated with the current stack
 #-----------------------------------------------------------------------------
 function ssabandon($force)
 {
