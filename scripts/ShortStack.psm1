@@ -1250,6 +1250,8 @@ function sshelp_commands
 #-----------------------------------------------------------------------------
 function sshelp_workflow
 {
+    $keywordColor = [ConsoleColor]::Green
+
     write-host "#########################################################################"
     write-host "#  SHORTSTACK WORKFLOW                                                  #"
     write-host "#########################################################################"
@@ -1261,29 +1263,51 @@ function sshelp_workflow
     write-host "       wait for dependencies to be accepted and merged."
     write-host
     write-host "Basic Workflow:"
-    write-host "    I have a new project that I'm calling 'superfoo' that is based on 'dev' branch,"
+    write-host -NoNewline "    I have a new project that I'm calling '"
+    write-host -NoNewline -ForegroundColor Yellow "superfoo"
+    write-host -NoNewline "' that is based on branch '"
+    write-host -NoNewline -ForegroundColor Magenta "dev"
+    write-host "',"
     write-host "    so I start a stack and make some changes like this:"
-    write-host "        1) at an up-to-date repository prompt, run:  ss new superfoo dev"
+    write-host -NoNewline "        1) at an up-to-date repository prompt, run: "
+    write-host -NoNewline -ForegroundColor $keywordColor "ss new "
+    write-host -NoNewline -ForegroundColor Yellow "superfoo "
+    write-host -ForegroundColor Magenta "dev"
     write-host "        2) make one or more commits"
-    write-host "        3) Push changes and create a new pull request:  ss push"
+    write-host -NoNewline "        3) Push changes and create a new pull request: "
+    write-host -ForegroundColor $keywordColor  "ss push"
     write-host "           (code review is automatically posted)"
-    write-host ""
+    write-host
     write-host "    Ready for next thesis:"
-    write-host "        1) Automatically create next branch in the stack:  ss new"
+    write-host -NoNewline "        1) Automatically create next branch in the stack: "
+    write-host -ForegroundColor $keywordColor "ss new"
     write-host "        2) make one or more commits"
-    write-host "        3) Push changes and create a new pull request:  ss push"
+    write-host -NoNewline "        3) Push changes and create a new pull request: "
+    write-host -ForegroundColor $keywordColor "ss push"
     write-host "        (repeat 1-3 for as many logical changes you want to make)"
     write-host ""
     write-host "    Go back to make fixes that address a code review on branch 2"
-    write-host "        1) Go to the right branch:   ss go 2"
+    write-host -NoNewline "        1) Go to the right branch: "
+    write-host -ForgroundColor $keywordColor "ss go 2"
     write-host "        2) Make one or more commits"
-    write-host "        3) Push changes to the existing pull request:  ss push"
-    write-host "        4) Sync up the now diverged branches (including dev):   ss update"
-    write-host ""
-    write-host "    If you want to see the status of your stack:      ss status"
-    write-host "    When you are ready to check in the whole stack:   ss finish "
-    write-host "    If you want to give up and throw it all away:     ss abandon"
-    write-host ""
+    write-host -NoNewline "        3) Push changes to the existing pull request: "
+    write-host -ForegroundColor $keywordColor "ss push"
+    write-host -NoNewline "        4) Sync up the now diverged branches (including dev): "
+    write-host -ForegroundColor $keywordColor "ss update"
+    write-host
+    write-host -NoNewline "    If you want to see the status of your stack: "
+    write-host -ForegroundColor $keywordColor "ss status"
+    write-host
+    write-host "Completing the Workflow:"
+    write-host -NoNewline "    To flatten the stack and make a final PR: "
+    write-host -ForegroundColor $keywordColor "ss finish "
+    write-host
+    write-host "Abandoning your work:"
+    write-host -NoNewline "    If you want to throw the current stack away: "
+    write-host -ForegroundColor $keywordColor "ss abandon"
+    write-host -NoNewline "    If you want to throw all the stacks in this repo away: "
+    write-host -ForegroundColor $keywordColor "ss abandonall"
+    write-host
 }
 
 #-----------------------------------------------------------------------------
@@ -1443,6 +1467,7 @@ function ssabandonall($force)
 {
     $branches = (get_toplevel_stack_branches)[0]
     foreach ($branch in $branches) {
+        git checkout $branch
         ssabandon $force
     }
 }
@@ -1450,13 +1475,8 @@ function ssabandonall($force)
 #-----------------------------------------------------------------------------
 # This will abandon all the PR's associated with the current stack
 #-----------------------------------------------------------------------------
-function ssabandon([switch]$all, $force)
+function ssabandon($force)
 {
-    #write-host -f Cyan @PSBoundParameters
-    if($all) {
-        ssabandonall $force
-    }
-
     $stackInfo = get_stack_info
     if($stackInfo.IsStacked -ne $true)
     {
@@ -2228,6 +2248,7 @@ function sstest()
 function ss()
 {
     Param(
+        [ValidateSet('/?', 'abandon', 'abandonall', 'finish', 'go', 'help', 'list', 'new', 'push', 'status', 'test', 'update')]
         $command,
         $option1,
         $option2,
@@ -2240,6 +2261,7 @@ function ss()
         switch -Regex ( $command )
         {
             '^abandon$'         { ssabandon $option1 $option2 $option3 $option4 }
+            '^abandonall$'      { ssabandonall $option1 $option2 $option3 $option4 }
             '^go$'              { ssgo $option1 $option2 $option3 $option4 }
             '^finish$'          { ssfinish $option1 $option2 $option3 $option4 }
             '^list$'            { sslist $option1 $option2 $option3 $option4 }
