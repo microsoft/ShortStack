@@ -30,7 +30,9 @@ $VSTSPersonalAccessToken="(your VSTS personal access key)"
 
 
 # Build and Test
-(Coming soon)
+Building and running the cmdlets:
+
+1. Open .sln in Visual Studio 2019 or later
 
 # Contribute
 Please feel free to fork your own repo and submit your work as a PR.  We will code review and bring in changes that meet a high quality bar.

@@ -1,7 +1,16 @@
+
+TODO
+
+NEW
+	[ ] Convert to .net core
+	[ ] Integrate to work directly against github
+	
+NEXT
+
+SOON
     [ ] Fix the SS script
         [ ] Dont finish if PR's aren't completed.
         [ ] Include only the appropriate PRs in the finish description
-
     [ ] SS:  When finishing a stack auto-add all of the participats in the individual code reviews
 
     [ ] SS: Be smart about when to push a new level or update an existing one.  Maybe if the files are similar.
@@ -42,4 +51,12 @@
         It should say Import-Module c:\tools\shortstack\scripts\ShortStack.psm1 -Force
 	[ ] pull down a stack from the server and mess with it locally
         - Need to be able to resolve when branch N on the server is ahead of local N branch
+
+LATER
+
+=================================
+DONE
+=================================
+
+
 
