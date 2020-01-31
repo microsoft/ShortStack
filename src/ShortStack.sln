@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.29503.13
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ShortStackLib", "ShortStackLib\ShortStackLib.csproj", "{45ABEEAB-B3DD-4F04-9797-ED1B3EF5628F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShortStackLogic", "ShortStackLogic\ShortStackLogic.csproj", "{0F1FCA04-A6D7-4315-B5EE-ED7ACB260AB9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ShortStackLogic", "ShortStackLogic\ShortStackLogic.csproj", "{0F1FCA04-A6D7-4315-B5EE-ED7ACB260AB9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
