@@ -1,0 +1,154 @@
+{
+    "name": "shortstack",
+    "displayName": "Short Stack Branch Manager",
+    "description": "Provides a developer workflow for producing large changes by managing a stack of GIT branches and pull requests.",
+    "version": "0.0.1",
+    "icon": "resources/shortstack.ico",
+    "publisher": "Microsoft",
+    "engines": {
+        "vscode": "^1.25.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "*"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "configuration": {
+            "type": "object",
+            "title": "ShortStack Configuration",
+            "properties": {
+                "shortstack.debug-server": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Launch the debugger when executing ShortStackServer.exe."
+                }
+            }
+        },
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "shortStack-explorer",
+                    "title": "Short Stack",
+                    "icon": "resources/shortstack.svg"
+                }
+            ]
+        },
+        "views": {
+            "shortStack-explorer": [
+                {
+                    "id": "shortStack-activeStacks",
+                    "name": "Active Stacks"
+                }
+            ]
+        },
+        "menus": {
+            "view/item/context": [
+                {
+                    "when": "viewItem == activeStack",
+                    "command": "shortStack.goToStack"
+                },
+                {
+                    "when": "viewItem == activeStack",
+                    "command": "shortStack.normalize"
+                },
+                {
+                    "when": "viewItem == activeStack",
+                    "command": "shortStack.normalizeWithOrigin"
+                },
+                {
+                    "when": "viewItem == 'stackLevel'",
+                    "command": "shortStack.goToLevel"
+                },
+                {
+                    "when": "viewItem == 'currentStackLevel'",
+                    "command": "shortStack.goToLevel"
+                },
+                {
+                    "when": "viewItem == 'stackLevel'",
+                    "command": "shortStack.goToPullRequest"
+                },
+                {
+                    "when": "viewItem == 'currentStackLevel'",
+                    "command": "shortStack.goToPullRequest"
+                },
+                {
+                    "when": "viewItem == 'currentStackLevel'",
+                    "command": "shortStack.pushStackLevel"
+                },
+                {
+                    "when": "view == 'shortStack-activeStacks'",
+                    "command": "shortStack.newStack"
+                },
+                {
+                    "when": "view == 'shortStack-activeStacks'",
+                    "command": "shortStack.createNextStackLevel"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "shortStack.goToStack",
+                "title": "Switch to stack"
+            },
+            {
+                "command": "shortStack.normalize",
+                "title": "Normalize"
+            },
+            {
+                "command": "shortStack.normalizeWithOrigin",
+                "title": "Normalize with origin"
+            },
+            {
+                "command": "shortStack.goToLevel",
+                "title": "Switch to level"
+            },
+            {
+                "command": "shortStack.goToPullRequest",
+                "title": "Go to pull request"
+            },
+            {
+                "command": "shortStack.newStack",
+                "title": "Create new stack"
+            },
+            {
+                "command": "shortStack.createNextStackLevel",
+                "title": "New stack level"
+            },
+            {
+                "command": "shortStack.pushStackLevel",
+                "title": "Push commits for level"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test"
+    },
+    "devDependencies": {
+        "@types/mocha": "^2.2.43",
+        "@types/node": "^8.0.46",
+        "gulp": "3.9.1",
+        "gulp-env": "0.4.0",
+        "gulp-mocha": "5.0.0",
+        "gulp-tslint": "8.1.2",
+        "mocha": "^4.0.1",
+        "tslint": "5.8.0",
+        "tslint-microsoft-contrib": "^5.0.1",
+        "tslint-no-unused-expression-chai": "0.0.3",
+        "typescript": "^2.5.3",
+        "vscode": "^1.1.18"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://microsoft.visualstudio.com/DefaultCollection/ES.SCM/_git/nmake.tools"
+    },
+    "dependencies": {
+        "vscode-jsonrpc": "^3.6.1"
+    }
+}
