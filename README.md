@@ -8,7 +8,7 @@ ShortStack is a tool to transform the way you check in code so that you get more
 
 # Getting Started
 To get started with the powershell script:
-1. Clone short stack to you local drive:  ```git clone https://mscodehub.visualstudio.com/ShortStack/_git/ShortStack c:\tools\shortstack```
+1. Clone short stack to you local drive:  ```git clone https://github.com/microsoft/ShortStack.git [local folder path]```
 2. Enable custom scripts on your machine with this powershell command:  ```Set-ExecutionPolicy Unrestricted```
 3. Install posh-git:  ```PowerShellGet\Install-Module posh-git -Scope CurrentUser```
 4. Get a VSTS access token:
