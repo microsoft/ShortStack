@@ -1,9 +1,26 @@
 
 TODO
+	[x] Convert to .net core
+    [ ] New-Stack MyTest should create a new stack branch
+        [ ] Works on both ssh and regular
+    [ ] Get-Stacks should show whatever stacks exist
+    [ ] Get-StackStaus should show very basic status
+    [ ] Push-StackLevel should create a PR 
+    [ ] Get-StackStatus should show the different levels
+    [ ] Select-stacklevel should move between stack levels
+    [ ] Update-Stack should push through changes
+        - User rebase instead of merge?
+
 
 NEW
-	[x] Convert to .net core
-	[ ] Integrate to work directly against github
+    [ ] Problem: native dlls must be copied locally to library.dll to work
+    [ ] Problem: Doesn't work right off the bat with ssh
+    [ ] Stories:
+        - An external person pushes a PR into some level of the stack
+        - Squashnig a stack mid-run
+        - picking up from a completed stack
+        - Quick stack for simple changes
+    
 	
 NEXT
 
