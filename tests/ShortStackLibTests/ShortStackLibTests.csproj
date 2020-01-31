@@ -85,15 +85,15 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\ShortStackLib\ShortStackLib.csproj">
+    <ProjectReference Include="..\..\src_OLD\ShortStackLib\ShortStackLib.csproj">
       <Project>{940efabc-37c0-421d-ac7e-391e4fe595fa}</Project>
       <Name>ShortStackLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\src\ShortStackLogic\ShortStackLogic.csproj">
+    <ProjectReference Include="..\..\src_OLD\ShortStackLogic\ShortStackLogic.csproj">
       <Project>{b5aa74b5-1b3e-48bc-9608-161f1efd7e85}</Project>
       <Name>ShortStackLogic</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\src\ShortStackServer\ShortStackServer.csproj">
+    <ProjectReference Include="..\..\src_OLD\ShortStackServer\ShortStackServer.csproj">
       <Project>{4ea1af9a-5392-4706-9d5a-c18ff96df7c4}</Project>
       <Name>ShortStackServer</Name>
     </ProjectReference>

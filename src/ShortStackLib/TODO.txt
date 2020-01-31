@@ -2,7 +2,7 @@
 TODO
 
 NEW
-	[ ] Convert to .net core
+	[x] Convert to .net core
 	[ ] Integrate to work directly against github
 	
 NEXT
