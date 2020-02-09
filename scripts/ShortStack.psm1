@@ -1,6 +1,7 @@
 # ShortStack
 # Copyright Microsoft 2017
 # Created by Eric Jorgensen
+# Additions by Jeremy Anderson
 #
 # This is a powershell module to enable a stacked pull request worflow.  Stacked pull
 # requests are  useful because they allow you to break up a big change
@@ -13,6 +14,13 @@
 
 # Strict mode helps us locate syntax errors that would normally be silent
 Set-StrictMode -version Latest
+
+# This module was not loaded in PowerShell Core. Abort.
+if ($PSVersionTable.PSEdition -ne "Core") {
+    Write-Host -f Yellow ("You attempted to load ShortStack in PowerShell {0}." -f $PSVersionTable.PSEdition)
+    Write-Host -f Yellow "ShortStack requires PowerShell Core. Aborting load."
+    return
+}
 
 # For messing with rest calls and urls
 Add-Type -AssemblyName System.Web
@@ -200,9 +208,9 @@ function query_github([string]$query)
         $response = ((Invoke-RestMethod `
         -Uri "https://api.github.com/graphql" `
         -Method Post `
-        -ContentType "application/json" `
         -Authentication Bearer `
         -Token $GitHubSecurePAT `
+        -ContentType "application/json" `
         -Body "{ `"query`": $escaped }"
         ).data)
 
@@ -424,7 +432,7 @@ function get_api_url($api, $query)
 function get_pull_requests_vsts($query)
 {
     $getPullRequestsUri = get_api_url "pullRequests" $query
-    return ,(rest_get($getPullRequestsUri))."value";
+    return @(,(rest_get($getPullRequestsUri))."value");
 }
 
 #-----------------------------------------------------------------------------
@@ -552,7 +560,7 @@ function complete_pull_request_github($id)
 function get_url_arguments_as_dictionary([string]$query)
 {
     $dict = @{}
-    $query.Split('&', [System.StringSplitOptions]::RemoveEmptyEntries)
+    $query.Split('&', [System.StringSplitOptions]::RemoveEmptyEntries) `
     | foreach-object {
         $split = $_.Split('=', [System.StringSplitOptions]::RemoveEmptyEntries)
         $dict[$split[0]] = [System.Web.HttpUtility]::UrlDecode($split[1]) -replace "^refs/heads/",""
@@ -574,7 +582,7 @@ function filter_github_pull_requests($refName, $state, $queryResults)
     $pullRequests = @()
     try
     {
-        $pullRequests += @($queryResults.repository.refs.nodes.associatedPullRequests.edges.node
+        $pullRequests += @($queryResults.repository.refs.nodes.associatedPullRequests.edges.node `
                     | select-object -Property `
                         @{Name='description'; Expression={$_.body}}, `
                         @{Name='pullrequestId'; Expression={$_.id}}, `
@@ -605,7 +613,7 @@ function filter_github_pull_requests($refName, $state, $queryResults)
         $pullRequests = $pullRequests | where-object {$_.headRefName -ieq $refName }
     }
 
-    return @($pullRequests)
+    return @(,$pullRequests)
 }
 
 #-----------------------------------------------------------------------------
@@ -615,25 +623,23 @@ function get_pull_requests($query)
 {
     if (is_github)
     {
-        #write-host -f DarkGray "Getting pull requests from GitHub"
         $results = get_pull_requests_github
         #write-host -f Cyan ($results | ConvertTo-Json -Depth 100)
         $parameters = get_url_arguments_as_dictionary $query
 
         if ($parameters['status'] -ieq "Active")
         {
-            return @(filter_github_pull_requests $parameters['sourceRefName'] 'OPEN' $results)
+            return @(,(filter_github_pull_requests $parameters['sourceRefName'] 'OPEN' $results))
         }
 
         if ($parameters['status'] -ieq "Completed")
         {
-            return @(filter_github_pull_requests $parameters['sourceRefName'] 'MERGED' $results)
+            return @(,(filter_github_pull_requests $parameters['sourceRefName'] 'MERGED' $results))
         }
     }
     else # VSTS
     {
-        #write-host -f DarkGray "Getting pull requests from VSTS"
-        return @(get_pull_requests_vsts $query)
+        return @(,(get_pull_requests_vsts $query))
     }
 }
 
@@ -650,6 +656,7 @@ function get_current_pull_request()
     $query="&status=Active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/" + $stackInfo.Branch)
     $pullRequests = @(get_pull_requests($query))
+    write-host -ForegroundColor Yellow ($pullRequests.Count)
     return $pullRequests[0]
 }
 
@@ -720,7 +727,7 @@ function get_commits($remoteBranch, $numberToGet)
         $commits = @()
         try
         {
-            $commits += $result.repository.ref.target.history.edges.node
+            $commits += $result.repository.ref.target.history.edges.node `
                         | select-object -Property `
                             @{Name='commitId'; Expression={$_.id}}, `
                             id, `
@@ -1002,6 +1009,7 @@ function get_vsts_auth_header
 function Get-VSTSUserGuids
 {
     $response = @(get_pull_requests(""))
+    write-host -ForegroundColor Yellow ($response.Count)
 
     $output = [ordered]@{}
     foreach($request in $response)
@@ -1412,6 +1420,7 @@ function ssstatus
         $query="&status=Active"
         $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$branchName")
         $pullRequests = @(get_pull_requests $query)
+        write-host -ForegroundColor Yellow ($pullRequests.Count)
         $representativePullRequest = $null
         if($pullRequests.Count -gt 0)
         {
@@ -1422,6 +1431,7 @@ function ssstatus
             $query="&status=Completed"
             $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$branchName")
             $pullRequests = @(get_pull_requests $query)
+            write-host -ForegroundColor Yellow ($pullRequests.Count)
             if($pullRequests.Count -gt 0)
             {
                 $representativePullRequest = $pullRequests[0]
@@ -1512,6 +1522,7 @@ function ssabandon($force)
 
     $query = "&status=active"
     $pullRequests = get_pull_requests($query)
+    write-host -ForegroundColor Yellow ($pullRequests.Count)
 
     $branchRoot = "refs/heads/" + $stackInfo.Branch.SubString(0, $stackInfo.Branch.Length-2)
 
@@ -1835,6 +1846,7 @@ function ssfinish($name, $desiredOrigin, $deleteFlag)
     $query = "&status=active"
 
     $pullRequests = get_pull_requests $query
+    write-host -ForegroundColor Yellow ($pullRequests.Count)
     if($pullRequests.Count -eq 0)
     {
         write-host -ForegroundColor DarkYellow "No active pull requests for this stack, may indicate an issue with this operation."
@@ -2042,7 +2054,9 @@ function sspush($force)
     # see if the pull request exists
     $query = "&status=active"
     $query += "&sourceRefName=" + [System.Web.HttpUtility]::UrlEncode("refs/heads/$currentBranch")
+    write-host -f Cyan "here"
     $pullRequests = get_pull_requests $query
+    write-host -ForegroundColor Cyan ("pullRequest Count: $($pullRequests.Count)")
 
     if($pullRequests -and $pullRequests[0] -and $pullRequests.Count -gt 1)
     {
