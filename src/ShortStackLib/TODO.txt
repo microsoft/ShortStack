@@ -1,6 +1,8 @@
 
 TODO
 	[x] Convert to .net core
+    [ ] Look at Posh-SSH  https://github.com/darkoperator/Posh-SSHstar
+
     [ ] New-Stack MyTest should create a new stack branch
         [ ] Works on both ssh and regular
     [ ] Get-Stacks should show whatever stacks exist
