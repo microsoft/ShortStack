@@ -1,6 +1,16 @@
 TODO
+    [x] help - show help
+    [ ] test - run ad-hoc test
+    [ ] status - show status of current stack
+    [ ] new - start a new stack
+    [ ] list - show available stacks
+    [ ] go - go to a stack
 
 NEW
+    [ ] abandon
+    [ ] finish
+    [ ] push
+    [ ] update
 
 SOON
 
