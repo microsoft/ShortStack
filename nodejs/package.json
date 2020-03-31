@@ -1,0 +1,30 @@
+{
+  "name": "shortstack",
+  "version": "0.01.00",
+  "description": "Stack pull requests on git",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "tape": "^4.13.0",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "@types/colors": "^1.2.1",
+    "@types/node": "12.12.7",
+    "@types/node-fetch": "^2.5.4",
+    "chai": "^4.2.0",
+    "chalk": "^3.0.0",
+    "colors": "^1.4.0",
+    "node-fetch": "^2.6.0",
+    "ts-node": "^8.8.1",
+    "xlsx": "^0.15.5"
+  },
+  "bin": {
+    "ss": "./package/shortstack.js",
+    "shortstack": "./package/shortstack.js"
+  }
+}
