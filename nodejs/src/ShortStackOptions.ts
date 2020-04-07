@@ -2,7 +2,8 @@
 export enum ShortStackAction
 {
     Help,
-    Test
+    Test,
+    New
 }
 
 //------------------------------------------------------------------------------
@@ -12,6 +13,8 @@ export class ShortStackOptions
 {
     action = ShortStackAction.Help;
     helpOption: string | undefined = undefined;
+    stackName: string | undefined = undefined;
+    stackOrigin: string | undefined = undefined;
     badArgs = new Array<string>();
 
     //------------------------------------------------------------------------------
@@ -48,7 +51,7 @@ export class ShortStackOptions
     }
 
     //------------------------------------------------------------------------------
-    // ctor
+    // process help command
     //------------------------------------------------------------------------------
     processHelp(argv: string[])
     {
@@ -57,5 +60,15 @@ export class ShortStackOptions
         {
             this.helpOption = this.getArgParts(argv[0]).name;
         }
+    }
+
+    //------------------------------------------------------------------------------
+    // process 'new' command
+    //------------------------------------------------------------------------------
+    processNew(argv: string[])
+    {
+        this.action = ShortStackAction.Help;
+        if(argv.length > 0) this.stackName = this.getArgParts(argv[0]).name;
+        if(argv.length > 1) this.stackOrigin = this.getArgParts(argv[1]).name;       
     }
 }

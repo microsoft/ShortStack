@@ -1,6 +1,8 @@
 import { ShortStackOptions, ShortStackAction } from "./ShortStackOptions";
 import chalk from "chalk"
 import { runTest } from "./actions/test";
+import { formatToWidth } from "./helpers/textHelper";
+import { newStack } from "./actions/newStack";
 
 //------------------------------------------------------------------------------
 // main
@@ -30,11 +32,10 @@ async function main(argv: string[]) {
 
         switch(options.action)
         {
-            case ShortStackAction.Test: runTest(); break;
+            case ShortStackAction.Test: await runTest(); break;
+            case ShortStackAction.New: await newStack(options); break;
         }
 
-        // TODO: Run your application code here with your options
-        // await myObject.doSomething();
         return 0;
     } catch (error) {
         console.error(error.stack);
@@ -57,12 +58,20 @@ function showHelp(options: ShortStackOptions)
         console.log(chalk.whiteBright("    ss help setup         ") + "Instructions on how to set up your environment for stacked PRs");
     }
 
+    const printHelpSection = (command: string, description: string) =>
+    {
+        console.log("    " + chalk.whiteBright(command));
+        console.log("         " + chalk.gray(formatToWidth(120, description).join("\n        ")));  
+    }
+
     switch(options.helpOption)
     {
         case "commands":
             console.log("Shortstack commands:");
-            console.log(chalk.whiteBright("    test"));
-            console.log("        Launch integration tests")
+            printHelpSection("new [(name)] [(origin)]", 
+                "Create a new stack with (name) tracking (origin).  If arguments are ommited, a new stack level is created.");
+            printHelpSection("test", 
+                "Launch integration tests");
             break;
         case "workflow":
             break;

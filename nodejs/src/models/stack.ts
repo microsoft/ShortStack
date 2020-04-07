@@ -1,9 +1,7 @@
-// Integration tests
-
 //------------------------------------------------------------------------------
-// Run the integration tests
+// The Stack class.   This is where the magic happens
 //------------------------------------------------------------------------------
-export function runTest()
+export class Stack
 {
-    console.log("Running integration tests...")
+
 }

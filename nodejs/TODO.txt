@@ -1,8 +1,8 @@
 TODO
     [x] help - show help
     [x] test - run integration test
-    [ ] status - show status of current stack
     [ ] new - start a new stack
+    [ ] status - show status of current stack
     [ ] list - show available stacks
     [ ] go - go to a stack
 
