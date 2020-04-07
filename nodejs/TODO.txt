@@ -1,6 +1,6 @@
 TODO
     [x] help - show help
-    [ ] test - run ad-hoc test
+    [x] test - run integration test
     [ ] status - show status of current stack
     [ ] new - start a new stack
     [ ] list - show available stacks
