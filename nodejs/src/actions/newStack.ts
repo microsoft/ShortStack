@@ -1,5 +1,5 @@
 import { ShortStackOptions } from "../ShortStackOptions";
-import { StackHandler } from "../models/stackHandler";
+import { ShortStackProcessor } from "../models/ShortStackProcessor";
 import chalk from "chalk";
 import { GitHelper } from "../helpers/gitHelper";
 
@@ -8,7 +8,7 @@ import { GitHelper } from "../helpers/gitHelper";
 //------------------------------------------------------------------------------
 export function newStack(options: ShortStackOptions)
 {
-    const handler = new StackHandler(new GitHelper());
+    const handler = new ShortStackProcessor(new GitHelper());
     handler.createNewStack(options.stackName, options.stackOrigin);
 
     console.log(chalk.greenBright("==================================="));
