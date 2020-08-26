@@ -8,6 +8,7 @@ TODO
     [ ] go - go to a stack
 
 NEW
+    [ ] Command to open the PR on the web
     [ ] test - run ad-hoc test
     [ ] abandon
     [ ] finish

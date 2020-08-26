@@ -1,55 +1,35 @@
-//------------------------------------------------------------------------------
-// Simple Class for thinking about options
-//------------------------------------------------------------------------------
-export class ShortStackOptions
-{
-    showHelp = false;
-    helpOption: string | undefined = undefined;
-    badArgs = new Array<string>();
+import { CommandLineOptionsClass } from "./Helpers/CommandLineHelper";
+
+export class ShortStackOptions extends CommandLineOptionsClass { 
+    commandName= "shortstack"
+    shortDescription= `(Version ${require("../package.json").version}) A tool for stacking pull requests in a git repo`
+    longDescription= `Great for isolating smaller changes of a much larger big change`
+
+    // @positionalParameter({description: "My ID description", required: true})
+    // myId: number = -1;  // Could also be a string
+    // // Flag parameters - these are True/False
+    // // Normally a parameter follow property name, but you can specify any number of alternate names
+    // @flagParameter({description: "blah blah"}, alternateNames: [ "c", "choc", "fudge"]})
+    // addChocolate = false;
+    // // Environment Parameters - these are pulled from the environment
+    // @environmentParameter({description: "Buzz buzz", required: true})
+    // USERNAME: string | undefined = undefined;
 
     //------------------------------------------------------------------------------
     // ctor
     //------------------------------------------------------------------------------
-    constructor(argv: string[])
+    constructor()
     {
-        if(argv.length == 0)
-        {
-            this.showHelp = true;
-            return;
-        }
-
-        // commandline is -name=value  (or /name=value), value is optional
-        const argument = this.getArgParts(argv[0]);
-        switch(argument.name)
-        {
-            case "h": 
-            case "help": 
-            case "?": this.processHelp(argv.slice(1)); break;
-            default: this.badArgs.push(argv[0]); break;
-        }
-        
+        super();
+        this.processCommandLine();
     }
-
     //------------------------------------------------------------------------------
-    // break -FOO=Bar into {name:"foo", value: "Bar"}
+    // validate
     //------------------------------------------------------------------------------
-    getArgParts(argument: string)
+    validate(reportError: (paramaterName: string, message: string) => void)
     {
-        const trimmed = argument.replace(/^([-/]*)/, "");
-        const parts = trimmed.split('=',2);
-        if(parts.length == 2) parts[0] = parts[0].toLowerCase();
-        return {name: parts[0], value: parts.length == 2 ? parts[1] : undefined}
-    }
-
-    //------------------------------------------------------------------------------
-    // ctor
-    //------------------------------------------------------------------------------
-    processHelp(argv: string[])
-    {
-        this.showHelp = true;
-        if(argv.length > 0)
-        {
-            this.helpOption = this.getArgParts(argv[0]).name;
-        }
+        // TODO: add code here to validate the full parameter set.
+        // if there are any problems, call reportError() so that they will
+        // all be reported to the user. 
     }
 }
