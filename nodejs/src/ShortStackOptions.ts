@@ -1,12 +1,14 @@
-import { CommandLineOptionsClass } from "./Helpers/CommandLineHelper";
+import { CommandLineOptionsClass, positionalParameter } from "./Helpers/CommandLineHelper";
 
 export class ShortStackOptions extends CommandLineOptionsClass { 
     commandName= "shortstack"
     shortDescription= `(Version ${require("../package.json").version}) A tool for stacking pull requests in a git repo`
     longDescription= `Great for isolating smaller changes of a much larger big change`
 
-    // @positionalParameter({description: "My ID description", required: true})
-    // myId: number = -1;  // Could also be a string
+    // Action shortstack should take
+    @positionalParameter({description: "Shortstack action.  Use 'shortstack help actions' to see available actions."})
+    action?: string;
+
     // // Flag parameters - these are True/False
     // // Normally a parameter follow property name, but you can specify any number of alternate names
     // @flagParameter({description: "blah blah"}, alternateNames: [ "c", "choc", "fudge"]})
@@ -23,6 +25,7 @@ export class ShortStackOptions extends CommandLineOptionsClass {
         super();
         this.processCommandLine();
     }
+
     //------------------------------------------------------------------------------
     // validate
     //------------------------------------------------------------------------------

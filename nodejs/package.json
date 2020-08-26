@@ -1,14 +1,17 @@
 {
   "name": "shortstack",
-  "version": "0.01.00",
+  "version": "0.01.03",
   "description": "Stack pull requests on git",
   "scripts": {
     "start": "ts-node src/index.ts",
+    "watch": "tsc -watch",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "UNLICENSED",
   "devDependencies": {
+    "nodemon": "^2.0.4",
     "tape": "^4.13.0",
     "typescript": "^3.8.3"
   },

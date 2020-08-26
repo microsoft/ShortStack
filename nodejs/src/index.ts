@@ -1,10 +1,11 @@
 import { ShortStackOptions } from "./ShortStackOptions";
 import chalk from "chalk"
+import { StackHandler } from "./models/StackHandler";
 
 //------------------------------------------------------------------------------
 // main
 //------------------------------------------------------------------------------
-async function main(argv: string[]) {
+async function main() {
 
     process.on("SIGINT", async () => {
         console.log("*** Process was interrupted! ***")
@@ -12,23 +13,30 @@ async function main(argv: string[]) {
     });
 
     try {
-        const options = new ShortStackOptions(argv);
-       
+        const options = new ShortStackOptions(); 
+      
         if(options.showHelp)
         {
-            showHelp(options);
+            options.showUsage();
             return 0;
         }
 
-        if(options.badArgs.length > 0)
-        {
-            console.log("ERROR: Bad arguments: ");
-            options.badArgs.forEach(arg => console.log(`  ${arg}`));
-            process.exit();
-        }   
+        if(options.validationErrors) {
+            console.log("Validation errors: ");
+            for(const error of options.validationErrors){
+                console.log(`    ${error.paramaterName}:  ${error.message}`);
+            }
+        }
 
-        // TODO: Run your application code here with your options
-        // await myObject.doSomething();
+        if(!options.action)  throw Error("No action specified."); 
+
+        const handler = new StackHandler(console.log);
+        switch(options.action!.toLowerCase())
+        {
+            case "new":  await handler.new(); break;
+            default: throw Error(`Unknown action: ${options.action}`)
+        }
+
         return 0;
     } catch (error) {
         console.error(error.stack);
@@ -37,28 +45,12 @@ async function main(argv: string[]) {
 }
 
 //------------------------------------------------------------------------------
-// show help
-//------------------------------------------------------------------------------
-function showHelp(options: ShortStackOptions)
-{
-    if(!options.helpOption)   
-    {
-        console.log("ShortStack is a tool for handling a stacked pull request workflow.")
-        console.log("")
-        console.log("for more information:")
-        console.log(chalk.whiteBright("    ss help commands      ") + "Show available commands");
-        console.log(chalk.whiteBright("    ss help workflow      ") + "Describe the ss workflow");
-        console.log(chalk.whiteBright("    ss help setup         ") + "Instructions on how to set up your environment for stacked PRs");
-    }
-}
-
-//------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
-console.log(chalk.whiteBright('SHORTSTACK v0.01.00'))
+console.log(chalk.whiteBright(`SHORTSTACK v${require("../package.json").version}`))
 
-main(process.argv.slice(2))
+main()
     .then(status => {
         //console.log(`Exiting with status: ${status}`)
         process.exit(status);
