@@ -55,10 +55,11 @@ export const HelpRightMargin = 120;
 //------------------------------------------------------------------------------
 enum ParameterType 
 {
-    Positional,
-    NameValue,
-    Flag,
-    Environment
+    Positional = "Positional",
+    NameValue = "NameValue",
+    Flag = "Flag",
+    Environment = "PositiEnvironmentonal",
+    Remaining = "Remaining",
 }
 
 
@@ -93,10 +94,24 @@ class ArgumentDetails
     type: ParameterType;
     required = false;
     orderValue = 0;
+    contentClassName: string;
+    contentConstructor: any;
 
-    constructor(propertyName: string, type: ParameterType){
+    constructor(propertyName: string, type: ParameterType, classTarget: Object){
         this.propertyName = propertyName;
         this.type = type;
+        this.contentClassName = classTarget.constructor.name;
+        this.contentConstructor = classTarget.constructor;
+    }
+
+    public clone(): any 
+    {
+        var cloneObj = new ArgumentDetails("",ParameterType.Environment,"") as any;
+        var me = this as any;
+        for (var attribut in this) {
+           cloneObj[attribut] = me[attribut];
+        }
+        return cloneObj;
     }
 }
 
@@ -105,15 +120,15 @@ const objectParameterMap = new Map<string, Map<string, ArgumentDetails>>();
 //------------------------------------------------------------------------------
 // helper to safely get the parameter map from an object
 //------------------------------------------------------------------------------
-function getParameterMap(target: any, constructIfMissing: boolean = false)
+function getParameterMap(className: string, constructIfMissing: boolean = false)
 {
-    if(!objectParameterMap.get(target.constructor.name) && constructIfMissing)
+    if(!objectParameterMap.get(className) && constructIfMissing)
     {
-        objectParameterMap.set(target.constructor.name, new Map<string, ArgumentDetails>());
+        objectParameterMap.set(className, new Map<string, ArgumentDetails>());
     }
 
-    const properties = objectParameterMap.get(target.constructor.name);
-    if(!properties) throw Error("Could not find properties definitions for " + target.constructor.name);
+    const properties = objectParameterMap.get(className);
+    if(!properties) throw Error("Could not find properties definitions for " + className);
     return properties;
 }
 
@@ -122,15 +137,15 @@ function getParameterMap(target: any, constructIfMissing: boolean = false)
 //------------------------------------------------------------------------------
 function genericParameter(type: ParameterType, args: {description?: string, alternateNames?: string[], required?: boolean}) {
     return function decorator(this: any, target: any, key: string) {
-        const properties = getParameterMap(target, true);
+        const properties = getParameterMap(target.constructor.name, true);
         if(properties.get(key)) return;
 
-        const details = new ArgumentDetails(key, type);
+        const details = new ArgumentDetails(key, type, target);
         details.alternateNames = args.alternateNames;
         details.description = args.description;
         if(args.required) details.required = args.required;
-        details.orderValue = properties.size;
-        properties.set(key, details);        
+        details.orderValue = properties.size; // order is just the index in the array
+        properties.set(key, details);    
     }
 }
 
@@ -156,6 +171,13 @@ export function environmentParameter(args: ParameterProperties) {
 }
   
 //------------------------------------------------------------------------------
+// parameterSet decorator
+//------------------------------------------------------------------------------
+export function remainingParameters(args: ParameterProperties) {
+    return genericParameter(ParameterType.Remaining, args);
+}
+  
+//------------------------------------------------------------------------------
 // Abstract base class for command line options
 //------------------------------------------------------------------------------
 export abstract class CommandLineOptionsClass {
@@ -169,7 +191,7 @@ export abstract class CommandLineOptionsClass {
     validationErrors: {paramaterName: string, message: string}[] | undefined = undefined;
 
     //------------------------------------------------------------------------------
-    // Show Usage
+    // Process command line
     //------------------------------------------------------------------------------
     processCommandLine(argv: string[] | null = null)
     {
@@ -209,7 +231,7 @@ export abstract class CommandLineOptionsClass {
         showUsage(this, printLine);
     }
 }
-  
+
 //------------------------------------------------------------------------------
 // Class communicating problems with the command line
 //------------------------------------------------------------------------------
@@ -223,17 +245,21 @@ export class OptionsError {
 //------------------------------------------------------------------------------
 function getParameters(options: any)
 {
-    let parameters = objectParameterMap.get(CommandLineOptionsClass.name)
-    if(!parameters) parameters = new Map<string, ArgumentDetails>();
-    else {
-        parameters.forEach(p => p.orderValue += 10000);
+    const baseParameters = objectParameterMap.get(CommandLineOptionsClass.name)?.values();
+    
+    let parameters = new Map<string, ArgumentDetails>();
+    for(let parameter of baseParameters!)
+    {
+        const parameterCopy = parameter.clone();
+        parameterCopy.orderValue += 10000; // Help parameters should show up last
+        parameters.set(parameter.propertyName, parameterCopy)
     }
     
     const localParameters = objectParameterMap.get(options.constructor.name);
     if(localParameters) {
         for(const parameter of localParameters.values())
         {
-            parameters?.set(parameter.propertyName, parameter);
+            parameters?.set(parameter.propertyName, parameter.clone());
         }
     }
     return parameters;
@@ -287,7 +313,7 @@ function formatOverflow(leftMargin: number, rightMargin: number, text: string)
 }
 
 //------------------------------------------------------------------------------
-// Process a decorated class with the argument list
+// Show usage text for the options object
 //------------------------------------------------------------------------------
 function showUsage(options: any, printLine: (text: string) => void)
 { 
@@ -351,6 +377,14 @@ function showUsage(options: any, printLine: (text: string) => void)
                         envNames = parameter.alternateNames
                     }
                     environmentDetails.push(quickLine (envNames.join("|"), parameter.description));
+                    break;
+                case ParameterType.Remaining:
+                    usageLine += " " + braceIfRequired(parameter.required, `[${parameter.propertyName}...]`);
+                    details.push(quickLine(parameter.propertyName, parameter.description));
+                    break;
+                default:
+                    console.log(`ERROR: unknown parameter type: ${parameter.type}`);
+                    break;
                 }
         }
     }
@@ -374,15 +408,14 @@ function showUsage(options: any, printLine: (text: string) => void)
 }
 
 //------------------------------------------------------------------------------
-// Process a decorated class with the argument list
+// Process an options object with decorated members using the argument list
 //------------------------------------------------------------------------------
 function fillOptions(options: any, argv: string[], reportError: (paramaterName: string, message: string) => void)
 {
     const parameters = getParameters(options);
 
-    const positionalHandlers = new Array<(v: string) => void>();
+    const positionalHandlers = new Array<(v: string) => boolean>();
     const positionalNames = new Array<string>();
-    // const argHandlers = new Map<string, (v: string) => void>();
     const flagHandlers = new Map<string, () => void>();
     
     for(const parameter of parameters.values())
@@ -390,7 +423,9 @@ function fillOptions(options: any, argv: string[], reportError: (paramaterName: 
         switch(parameter.type)
         {
             case  ParameterType.Positional: 
-                positionalHandlers.push((v: string) => {options[parameter.propertyName] = v});
+                positionalHandlers.push((v: string) => {
+                    options[parameter.propertyName] = v; 
+                    return false;});
                 positionalNames.push(parameter.propertyName);
                 break;
             case  ParameterType.Flag: 
@@ -426,6 +461,15 @@ function fillOptions(options: any, argv: string[], reportError: (paramaterName: 
                     reportError(envNames.join("|"), "Could not find value from environment. " + parameter.description)
                 }
                 break;
+            case  ParameterType.Remaining: 
+                // Since we are getting a set, the return on the handler is "true" to signal that we eat the rest of the parameters
+                options[parameter.propertyName] = new Array<string>();
+                positionalHandlers.push((v: string) => {options[parameter.propertyName].push(v); return true;});
+                positionalNames.push(parameter.propertyName);
+                break;
+            default: 
+                throw Error(`Bad parameter type: ${parameter.type}`)
+
         }
     }
 
@@ -435,7 +479,6 @@ function fillOptions(options: any, argv: string[], reportError: (paramaterName: 
 
         const trimmed = argv[i].replace(/^([-/]*)/, "");
         const parts = trimmed.split('=');
-
         // Maybe this is a flag
         const parameterName= parts[0].toLowerCase();
         const flagHandler = flagHandlers.get(parameterName);
@@ -450,20 +493,22 @@ function fillOptions(options: any, argv: string[], reportError: (paramaterName: 
             if(positionIndex < positionalHandlers.length)
             {
                 try {
-                    positionalHandlers[positionIndex](argv[i]);
+                    if(!positionalHandlers[positionIndex](argv[i])) 
+                    {
+                        positionIndex++;
+                    };
                 }
                 catch(err)
                 {
                     reportError(positionalNames[positionIndex], err.message)
+                    positionIndex++;
                 }
 
-                positionIndex++;
                 continue;
             }
             else {
                 reportError(parameterName, "Unknown parameter")
             }
         }
-
     }
 }
