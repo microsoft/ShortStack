@@ -31,12 +31,12 @@ async function main() {
         if(!options.action)  throw Error("No action specified."); 
 
         const handler = new StackHandler(console.log);
-        switch(options.action!.toLowerCase())
+        switch(options.action)
         {
-            case "new":  await handler.new(); break;
+            case "new":  await handler.new(options.actionArguments || []); break;
+            case "go":  console.log("GO"); break;
             default: throw Error(`Unknown action: ${options.action}`)
         }
-
         return 0;
     } catch (error) {
         console.error(error.stack);
@@ -44,9 +44,9 @@ async function main() {
     } 
 }
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 
 console.log(chalk.whiteBright(`SHORTSTACK v${require("../package.json").version}`))
 
