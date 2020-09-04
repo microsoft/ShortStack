@@ -16,13 +16,12 @@ export class StackHandler
     // new - create a new stack or new level in the stack
     // usage:  ss new [stackname]
     //------------------------------------------------------------------------------
-    async new(args: string[]) 
+    async new(options: ShortStackNewOptions) 
     {
-        const newOption = new ShortStackNewOptions(args);
         // Look at local branches and find all known stacks
         // look and see if the current branch is a stack
         // if there is a stackname arg,  
 
-        this._logLine(`NEW: ${newOption.name}, ${newOption.root}`);
+        this._logLine(`NEW: ${options.stackName}, ${options.root}`);
     }
 }

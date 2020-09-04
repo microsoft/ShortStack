@@ -6,27 +6,23 @@ E.g.:
         shortDescription= `(Version ${require("../package.json").version}) A tool for mincing rectified bean sprouts`
         longDescription= `Yadda yadda yadda`
         // EXAMPLES OF PARAMETERS
+
         // positional parameter - can be a string or number
         // positional parameter order is controlled by the order in the code.  
         // Positional parameters and named parameters can be intermixed
         // parameters are not required by default
         @positionalParameter({description: "My ID description", required: true})
         myId: number = -1;  // Could also be a string
+
         // Flag parameters - these are True/False
         // Normally a parameter follow property name, but you can specify any number of alternate names
         @flagParameter({description: "blah blah"}, alternateNames: [ "c", "choc", "fudge"]})
         addChocolate = false;
+
         // Environment Parameters - these are pulled from the environment
         @environmentParameter({description: "Buzz buzz", required: true})
         USERNAME: string | undefined = undefined;
-        //------------------------------------------------------------------------------
-        // ctor
-        //------------------------------------------------------------------------------
-        constructor()
-        {
-            super();
-            this.processCommandLine();
-        }
+
         //------------------------------------------------------------------------------
         // validate
         //------------------------------------------------------------------------------
@@ -37,8 +33,9 @@ E.g.:
             // all be reported to the user. 
         }
     }
+
     // Example of how to use in a script:
-    const options = new MyCommandLineOptions(); 
+    const options = CreateOptions(MyCommandLineOptions); 
     if(options.showHelp) options.showUsage();
     if(options.validationErrors) {
         console.log("Validation errors: ");
@@ -55,11 +52,12 @@ export const HelpRightMargin = 120;
 //------------------------------------------------------------------------------
 enum ParameterType 
 {
-    Positional = "Positional",
-    NameValue = "NameValue",
-    Flag = "Flag",
-    Environment = "PositiEnvironmentonal",
-    Remaining = "Remaining",
+    Positional = "Positional",              // positional parameter 
+    NameValue = "NameValue",                // -Name=Value 
+    Flag = "Flag",                          // -Flag
+    Environment = "PositiEnvironmentonal",  // Pull this from the environment
+    Remaining = "Remaining",                // Suck all the remaining parameters into a string array
+    SubCommand = "SubCommand"               // A string subcommand with separate parameters
 }
 
 
@@ -71,6 +69,7 @@ export interface ParameterProperties
     description?: string
     alternateNames?: string[]
     required?: boolean
+    commands?: any[] // TODO: need to type this to a class that has a static Create(typearg: CommandLineOptionsClass, args: string[]) 
 }
 
 //------------------------------------------------------------------------------
@@ -96,6 +95,7 @@ class ArgumentDetails
     orderValue = 0;
     contentClassName: string;
     contentConstructor: any;
+    decoratorConfig?: ParameterProperties;
 
     constructor(propertyName: string, type: ParameterType, classTarget: Object){
         this.propertyName = propertyName;
@@ -135,12 +135,13 @@ function getParameterMap(className: string, constructIfMissing: boolean = false)
 //------------------------------------------------------------------------------
 // general decorator for parameters
 //------------------------------------------------------------------------------
-function genericParameter(type: ParameterType, args: {description?: string, alternateNames?: string[], required?: boolean}) {
+function genericParameter(type: ParameterType, args: ParameterProperties) {
     return function decorator(this: any, target: any, key: string) {
         const properties = getParameterMap(target.constructor.name, true);
         if(properties.get(key)) return;
 
         const details = new ArgumentDetails(key, type, target);
+        details.decoratorConfig = args;
         details.alternateNames = args.alternateNames;
         details.description = args.description;
         if(args.required) details.required = args.required;
@@ -171,12 +172,30 @@ export function environmentParameter(args: ParameterProperties) {
 }
   
 //------------------------------------------------------------------------------
-// parameterSet decorator
+// remainingParameters decorator
 //------------------------------------------------------------------------------
 export function remainingParameters(args: ParameterProperties) {
     return genericParameter(ParameterType.Remaining, args);
 }
   
+//------------------------------------------------------------------------------
+// parameterSet decorator
+//------------------------------------------------------------------------------
+export function subCommand(args: ParameterProperties) {
+    if(!args.commands) throw Error("@subCOmmand decorators must set the commands property")
+    return genericParameter(ParameterType.SubCommand, args);
+}
+  
+//------------------------------------------------------------------------------
+// CreateOptions - use this to instantiate your options class
+//------------------------------------------------------------------------------
+export function CreateOptions(classType: any, args?: string[])
+{
+    const newOptions = new classType();
+    newOptions.processCommandLine(args);
+    return newOptions;
+}
+
 //------------------------------------------------------------------------------
 // Abstract base class for command line options
 //------------------------------------------------------------------------------
@@ -195,10 +214,14 @@ export abstract class CommandLineOptionsClass {
     //------------------------------------------------------------------------------
     processCommandLine(argv: string[] | null = null)
     {
+        if(this.positionIndex > -1) throw Error("Called processCommandLine Twice");
+        this.positionIndex = 0;
         if(!argv) argv = process.argv.slice(2);
         try {
-            fillOptions(this, argv, this.addError)
 
+            this.prepareHandlers(this.addError);
+            argv.forEach(arg => this.processNextParameter(arg, true, this.addError));
+    
             if(argv.length == 0) this.showHelp = true;
             if(this.showHelp) return;
 
@@ -207,6 +230,150 @@ export abstract class CommandLineOptionsClass {
         catch(err)
         {
             this.addError("GENERAL ERROR", err.message);
+        }
+    }
+
+    positionalHandlers?: Array<(v: string) => boolean>;
+    positionalNames?: Array<string>;
+    flagHandlers?: Map<string, () => void>;
+    private positionIndex = -1;
+
+    //------------------------------------------------------------------------------
+    // Process an options object with decorated members using the argument list
+    //------------------------------------------------------------------------------
+    private prepareHandlers(reportError: (paramaterName: string, message: string) => void)
+    {
+        if(this.positionalHandlers) return;
+        const parameters = getParameters(this);
+
+        this.positionalHandlers = new Array<(v: string) => boolean>();
+        this.positionalNames = new Array<string>();
+        this.flagHandlers = new Map<string, () => void>();
+        
+        const options = this as any;
+
+        for(const parameter of parameters.values())
+        {
+            switch(parameter.type)
+            {
+                case  ParameterType.Positional: 
+                    this.positionalHandlers.push((v: string) => {
+                        options[parameter.propertyName] = v; 
+                        return false;});
+                    this.positionalNames.push(parameter.propertyName);
+                    break;
+                case  ParameterType.Flag: 
+                    if(parameter.alternateNames)
+                    {
+                        for(const name of parameter.alternateNames)
+                        {
+                            this.flagHandlers.set(name.toLowerCase(), () => {options[parameter.propertyName] = true});
+                        }
+                    }
+                    else 
+                    {
+                        this.flagHandlers.set(parameter.propertyName.toLowerCase(), () => {options[parameter.propertyName] = true});
+                    }
+                    break;
+                case ParameterType.Environment:
+                    let envNames = [parameter.propertyName];
+                    if(parameter.alternateNames && parameter.alternateNames.length > 0)
+                    {
+                        envNames = parameter.alternateNames
+                    }
+                    // Try to get this value now from the environment
+                    for(const name of envNames)
+                    {
+                        const foundValue = process.env[name];
+                        if(foundValue) {
+                            options[parameter.propertyName] = foundValue;
+                            break;
+                        }
+                    }
+                    if(parameter.required && !options[parameter.propertyName])
+                    {
+                        reportError(envNames.join("|"), "Could not find value from environment. " + parameter.description)
+                    }
+                    break;
+                case  ParameterType.Remaining: 
+                    // Since we are getting a set, the return on the handler is "true" to signal that we eat the rest of the parameters
+                    options[parameter.propertyName] = new Array<string>();
+                    this.positionalHandlers.push((v: string) => {options[parameter.propertyName].push(v); return true;});
+                    this.positionalNames.push(parameter.propertyName);
+                    break;
+                case ParameterType.SubCommand:
+                    // A sub command functions like a special positional parameter.  The first
+                    // word is the name of the sub command, then the command "eats" the next few parameters 
+                    // that belong to the sub command before releasing parameters back to the main command
+
+                    // First, track empty versions of the subcommand options classes so that we know the subcommand
+                    // Names.  
+                    const subCommands = parameter.decoratorConfig!.commands!
+                        .map((commandType: any) => CreateOptions(commandType,[]));
+                    
+                    let chosenSubCommand: CommandLineOptionsClass | undefined;
+
+                    // The handler will feed arguments to the subcommand
+                    this.positionalHandlers.push((arg: string) => {
+                        if(!chosenSubCommand) {
+                            chosenSubCommand = subCommands.find(c => c.commandName.toLowerCase() == arg.toLowerCase());
+                            if(!chosenSubCommand) {
+                                 reportError(parameter.propertyName, `Unknown option: ${arg}`);
+                                 return false;
+                            }
+                            options[parameter.propertyName] = chosenSubCommand; 
+                            return true; // We could process this, so keep parsing options
+                        }
+                        return chosenSubCommand.processNextParameter(arg, false, reportError);});
+                    this.positionalNames.push(parameter.propertyName);
+                    break;
+                default: 
+                    throw Error(`Bad parameter type: ${parameter.type}`)
+            }
+        }
+    }
+
+    //------------------------------------------------------------------------------
+    // Process an options object with decorated members using the argument list
+    // Returns true if there was a known way to process the argument
+    //------------------------------------------------------------------------------
+    processNextParameter(arg: string, reportUnknownParameter: boolean,  reportError: (paramaterName: string, message: string) => void)
+    {
+        const trimmed = arg.replace(/^([-/]*)/, "");
+        const hasPrefix = trimmed.length < arg.length;
+        const parts = trimmed.split('=');
+        // Maybe this is a flag
+        const parameterName= parts[0].toLowerCase();
+        const flagHandler = this.flagHandlers!.get(parameterName);
+
+        if(flagHandler && hasPrefix) {
+            flagHandler();
+            return true;
+        }
+        else 
+        {
+            // if it looks like a plain argument, try to process it
+            // as a positional paraments
+            if(this.positionIndex < this.positionalHandlers!.length)
+            {
+                try {
+                    if(!this.positionalHandlers![this.positionIndex](arg)) 
+                    {
+                        this.positionIndex++;
+                    };
+                }
+                catch(err)
+                {
+                    reportError(this.positionalNames![this.positionIndex], err.message)
+                    this.positionIndex++;
+                }
+
+                return true;
+            }
+            else {
+                if(reportUnknownParameter) reportError(parameterName, "Unknown parameter");
+                return false;
+            }
         }
     }
 
@@ -382,6 +549,15 @@ function showUsage(options: any, printLine: (text: string) => void)
                     usageLine += " " + braceIfRequired(parameter.required, `[${parameter.propertyName}...]`);
                     details.push(quickLine(parameter.propertyName, parameter.description));
                     break;
+                case ParameterType.SubCommand:
+                    const subCommandNames = new Array<string>();
+                    for(const commandType of parameter.decoratorConfig!.commands!) {
+                        const subCommandOptions = CreateOptions(commandType,[]);
+                        details.push(quickLine(subCommandOptions.commandName, subCommandOptions.shortDescription))
+                        subCommandNames.push(subCommandOptions.commandName)
+                    }
+                    usageLine += " " + braceIfRequired(parameter.required, `(${subCommandNames.join("|")}) (options)`);
+                    break;
                 default:
                     console.log(`ERROR: unknown parameter type: ${parameter.type}`);
                     break;
@@ -407,108 +583,3 @@ function showUsage(options: any, printLine: (text: string) => void)
     }
 }
 
-//------------------------------------------------------------------------------
-// Process an options object with decorated members using the argument list
-//------------------------------------------------------------------------------
-function fillOptions(options: any, argv: string[], reportError: (paramaterName: string, message: string) => void)
-{
-    const parameters = getParameters(options);
-
-    const positionalHandlers = new Array<(v: string) => boolean>();
-    const positionalNames = new Array<string>();
-    const flagHandlers = new Map<string, () => void>();
-    
-    for(const parameter of parameters.values())
-    {
-        switch(parameter.type)
-        {
-            case  ParameterType.Positional: 
-                positionalHandlers.push((v: string) => {
-                    options[parameter.propertyName] = v; 
-                    return false;});
-                positionalNames.push(parameter.propertyName);
-                break;
-            case  ParameterType.Flag: 
-                if(parameter.alternateNames)
-                {
-                    for(const name of parameter.alternateNames)
-                    {
-                        flagHandlers.set(name.toLowerCase(), () => {options[parameter.propertyName] = true});
-                    }
-                }
-                else 
-                {
-                    flagHandlers.set(parameter.propertyName.toLowerCase(), () => {options[parameter.propertyName] = true});
-                }
-                break;
-            case ParameterType.Environment:
-                let envNames = [parameter.propertyName];
-                if(parameter.alternateNames && parameter.alternateNames.length > 0)
-                {
-                    envNames = parameter.alternateNames
-                }
-                // Try to get this value now from the environment
-                for(const name of envNames)
-                {
-                    const foundValue = process.env[name];
-                    if(foundValue) {
-                        options[parameter.propertyName] = foundValue;
-                        break;
-                    }
-                }
-                if(parameter.required && !options[parameter.propertyName])
-                {
-                    reportError(envNames.join("|"), "Could not find value from environment. " + parameter.description)
-                }
-                break;
-            case  ParameterType.Remaining: 
-                // Since we are getting a set, the return on the handler is "true" to signal that we eat the rest of the parameters
-                options[parameter.propertyName] = new Array<string>();
-                positionalHandlers.push((v: string) => {options[parameter.propertyName].push(v); return true;});
-                positionalNames.push(parameter.propertyName);
-                break;
-            default: 
-                throw Error(`Bad parameter type: ${parameter.type}`)
-
-        }
-    }
-
-    let positionIndex = 0;
-    for(let i = 0; i < argv.length; i++)
-    {
-
-        const trimmed = argv[i].replace(/^([-/]*)/, "");
-        const parts = trimmed.split('=');
-        // Maybe this is a flag
-        const parameterName= parts[0].toLowerCase();
-        const flagHandler = flagHandlers.get(parameterName);
-        if(flagHandler) {
-            flagHandler();
-            continue;
-        }
-        else 
-        {
-            // if it looks like a plain argument, try to process it
-            // as a positional paraments
-            if(positionIndex < positionalHandlers.length)
-            {
-                try {
-                    if(!positionalHandlers[positionIndex](argv[i])) 
-                    {
-                        positionIndex++;
-                    };
-                }
-                catch(err)
-                {
-                    reportError(positionalNames[positionIndex], err.message)
-                    positionIndex++;
-                }
-
-                continue;
-            }
-            else {
-                reportError(parameterName, "Unknown parameter")
-            }
-        }
-    }
-}

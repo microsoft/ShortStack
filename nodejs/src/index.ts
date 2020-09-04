@@ -1,6 +1,7 @@
-import { ShortStackOptions } from "./ShortStackOptions";
+import { ShortStackOptions, ShortStackNewOptions } from "./ShortStackOptions";
 import chalk from "chalk"
 import { StackHandler } from "./models/StackHandler";
+import { CreateOptions } from "./Helpers/CommandLineHelper";
 
 //------------------------------------------------------------------------------
 // main
@@ -13,7 +14,7 @@ async function main() {
     });
 
     try {
-        const options = new ShortStackOptions(); 
+        const options = CreateOptions(ShortStackOptions);
       
         if(options.showHelp)
         {
@@ -26,14 +27,15 @@ async function main() {
             for(const error of options.validationErrors){
                 console.log(`    ${error.paramaterName}:  ${error.message}`);
             }
+            return 1;
         }
 
         if(!options.action)  throw Error("No action specified."); 
 
         const handler = new StackHandler(console.log);
-        switch(options.action)
+        switch(options.action.commandName)
         {
-            case "new":  await handler.new(options.actionArguments || []); break;
+            case "new":  await handler.new(options.action! as ShortStackNewOptions); break;
             case "go":  console.log("GO"); break;
             default: throw Error(`Unknown action: ${options.action}`)
         }
@@ -55,4 +57,3 @@ main()
         //console.log(`Exiting with status: ${status}`)
         process.exit(status);
     });
-
