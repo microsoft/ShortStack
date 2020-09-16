@@ -1,6 +1,6 @@
 import { ShortStackOptions, ShortStackNewOptions } from "./ShortStackOptions";
 import chalk from "chalk"
-import { StackHandler, ShortStackError } from "./models/StackHandler";
+import { CommandHandler, ShortStackError } from "./models/CommandHandler";
 import { CreateOptions } from "./Helpers/CommandLineHelper";
 
 //------------------------------------------------------------------------------
@@ -32,7 +32,7 @@ async function main() {
 
         if(!options.action)  throw Error("No action specified."); 
 
-        const handler = new StackHandler(console.log);
+        const handler = new CommandHandler(console.log);
         await handler.init();
         switch(options.action.commandName)
         {

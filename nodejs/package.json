@@ -1,6 +1,6 @@
 {
   "name": "shortstack",
-  "version": "0.01.04",
+  "version": "0.0.01",
   "description": "Stack pull requests on git",
   "scripts": {
     "start": "ts-node src/index.ts",

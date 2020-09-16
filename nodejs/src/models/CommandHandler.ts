@@ -1,12 +1,14 @@
 import { ShortStackNewOptions } from "../ShortStackOptions";
-import simpleGit, {SimpleGit, SimpleGitOptions, StatusResult} from 'simple-git';
+import simpleGit, {SimpleGit, SimpleGitOptions} from 'simple-git';
+import {StackInfo} from "./Stack"
+import chalk from "chalk";
 
 export class ShortStackError extends Error{ }
-export class StackHandler 
+export class CommandHandler 
 {
     private _logLine = (text:string) => {};
     private _git: SimpleGit; 
-    private _status?: StatusResult;
+    currentBranch: String | null = null;
 
     //------------------------------------------------------------------------------
     // ctor
@@ -29,13 +31,15 @@ export class StackHandler
     //------------------------------------------------------------------------------
     async init()
     {
-        this._git.remote
         try {
-            this._status = await this._git.status();
+            const status = await this._git.status();
+            this.currentBranch = status.current;
         }
         catch(error) {
             throw new ShortStackError(`Git error: ${error.message}`)    
         }
+
+        if(!this.currentBranch) throw new ShortStackError("ShortStack must be run in a git repo directory.")
     }
 
     //------------------------------------------------------------------------------
@@ -44,7 +48,7 @@ export class StackHandler
     private async checkForDanglingWork()
     {
         await this._git.fetch();
-        const status = this._status!;
+        const status = await this._git.status();
         if(status.not_added.length > 0
             || status.conflicted.length > 0
             || status.created.length > 0
@@ -64,45 +68,34 @@ export class StackHandler
     async new(options: ShortStackNewOptions) 
     {
         await this.checkForDanglingWork();
-        // TODO:  if(warn_on_dangling_work)  return  
-            // git fetch
-            // git status
-        
-        
-        // Get a list of all the stacks
-        // if options.name is null, then figure out the current stack and level
-            // if not stacked: Error "Current branch is not a stacked branch.  To start a stack:  ss new (name) (origin branch to track)"
+        const stackInfo = await StackInfo.Create(this._git, this.currentBranch as string);
 
-        // if there is a name
-            // Error if the stack exists
-            // Create level 0 to track the origin (default to main or master) and push to origin/0  
-                // Branch name is name/__stack/0
-                // tracking branch is origin/main(or other)
-            // Push 0 to server
-            // Set current stack object to 0
-            //     git branch $newBranch --track $origin *> $null
-            //     git checkout $newBranch   *> $null
-            //     $pullResult = git_pull $origin
-            //     [void](check_for_good_git_result $pullResult)
-            //     $pushResult = git_push origin $newBranch
-            //     [void](check_for_good_git_result $pushResult)
-        
-        
-        // Create next stack level
-            // Create branch n+1 to track n and push to origin n+1
-    
-        
-        // write-host -ForegroundColor Green "==================================="
-        // write-host -ForegroundColor Green "---  Your new branch is ready!  ---"
-        // write-host -ForegroundColor Green "==================================="
+        if(!options.stackName && !stackInfo.current)
+        {
+            throw new ShortStackError("The current branch is not a stacked branch")
+        }
+
+        if(options.stackName)
+        {
+            if(stackInfo.current)
+            {
+                throw new ShortStackError("Please switch to a non-stacked branch before creating a new stack.")
+            }
+
+            this._logLine("Creating a new stack...")
+            const newStack = await stackInfo.CreateStack(options.stackName);
+            this._logLine("Setting up stack level 1...")
+            await newStack.AddLevel();
+        }
+
+        this._logLine(chalk.greenBright("==================================="))
+        this._logLine(chalk.greenBright("---  Your new branch is ready!  ---"))
+        this._logLine(chalk.greenBright("==================================="))
         // write-host "Next steps:"
         // write-host "    1) Keep to a 'single-thesis' change for this branch"
         // write-host "    2) make as many commits as you want"
         // write-host "    3) When your change is finished:"
         // write-host "       ss push   <== pushes your changes up and creates a pull request."
         // write-host "       ss new    <== creates the next branch for a new change.`n`n"
-
-
-        this._logLine(`NEW: ${options.stackName}, ${options.root}`);
     }
 }
