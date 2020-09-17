@@ -1,10 +1,18 @@
 TODO
     [x] help - show help
-    [ ] new - start a new stack
+    [x] new - start a new stack
+        [ ] If current branch is not ahead of previous branch, don't create a new one. 
         
 
-    [ ] status - show status of current stack    
+    [ ] status - show status of current stack 
+        [ ] Show the levels   
+        [ ] Show where we need to push/resolve
+        [ ] if -detailed then show descriptions of parent branch commits that are not in the stack
     [ ] list - show available stacks
+        [x] show stacks and levels
+        [ ] Show all commits for each level that are not merges
+        [ ] highlight commits not pushed to origin
+        [ ] Show count of commits in parent branch that are not merged
     [ ] go - go to a stack
 
 NEW

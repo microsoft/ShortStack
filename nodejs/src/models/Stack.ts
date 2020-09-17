@@ -1,4 +1,4 @@
-import { SimpleGit } from "simple-git";
+import { SimpleGit, BranchSummary } from "simple-git";
 import { ShortStackError } from "./CommandHandler";
 
 //------------------------------------------------------------------------------
@@ -16,13 +16,16 @@ export class StackItem {
     parent: Stack;
     levelNumber: number;
     get branchName() { return constructStackLevelBranchName(this.parent.name, this.levelNumber)}
+    trackingBranch: string;
+    label?: string;
 
     //------------------------------------------------------------------------------
     // ctor
     //------------------------------------------------------------------------------
-    constructor(parent: Stack, levelNumber: number) {
+    constructor(parent: Stack, levelNumber: number, trackingBranch: string) {
         this.parent = parent;
         this.levelNumber = levelNumber;
+        this.trackingBranch = trackingBranch;
     }
 }
 
@@ -67,7 +70,7 @@ export class Stack {
         await this._git.pull();
         await this._git.push(this.remoteName, newBranchName);
 
-        const newItem = new StackItem(this, newLevelNumber);
+        const newItem = new StackItem(this, newLevelNumber, trackingBranch);
         this.levels.push(newItem);
         this.currentLevel = newItem;
     }
@@ -80,8 +83,13 @@ export class Stack {
 export class StackInfo {
     current?: StackItem;
 
+    get stacks() {return Array.from(this._stacks.values()) }
+
     private _git: SimpleGit;
     private _stacks = new Map<string, Stack>()
+    private remoteName = "origin";
+
+
 
     //------------------------------------------------------------------------------
     // ctor
@@ -90,18 +98,42 @@ export class StackInfo {
         this._git = git;
     }
 
+
     //------------------------------------------------------------------------------
     // discover all the local stacks
     //------------------------------------------------------------------------------
     static async Create(git: SimpleGit, currentBranch: string)
     {
         const output = new StackInfo(git);
-        const branchSummary = await git.branchLocal()
-        for(const localBranchName in branchSummary.branches)
+        const branchSummary = await git.branchLocal();
+        output.remoteName = "origin";
+        //TODO: maybe discover remote name like this:  await git.remote([])
+
+        for(const branchKey in branchSummary.branches)
         {
-            console.log("Loading branch: " + localBranchName);
-            // TODO: If the current branch matches the localBranchName, then set this.current
-            //console.log(`Data: ${JSON.stringify(branchSummary.branches[localBranchName],null,2)}`)
+            const branchInfo = branchSummary.branches[branchKey];
+            const match = /(.*?)\/_ss\/(\d\d\d)$/.exec(branchKey);
+            if(match) {
+                const stackName = match[1];
+                const levelNumber = parseInt(match[2]);
+                const config = await git.listConfig();
+                let trackingBranch = config.values[".git/config"][`branch.${branchKey}.merge`] as string;
+                trackingBranch = trackingBranch.replace("refs/heads/", "");
+                let remoteName = await output.remoteName;
+                if(!output._stacks.get(stackName)) {
+                    output._stacks.set(stackName, new Stack(git, stackName, trackingBranch, remoteName ))
+                }
+
+                const myStack = output._stacks.get(stackName)!;
+                const newLevel = new StackItem(myStack, levelNumber, trackingBranch);
+                newLevel.label = branchInfo.label;
+                myStack.levels[levelNumber] = newLevel;
+
+                if(branchKey == currentBranch) {
+                    output.current = newLevel;
+                    myStack.currentLevel = newLevel;
+                }
+            }
         }
 
         return output;
@@ -113,17 +145,16 @@ export class StackInfo {
     async CreateStack(name: string, parentBranch?: string )
     {
         name = name.toLowerCase();
-        let remoteName = "origin";  // Discover like this: await this._git.remote([])
         if(!parentBranch)
         {
             // Get default branch
-            const remoteInfo = await this._git.remote(["show", remoteName]);
+            const remoteInfo = await this._git.remote(["show", this.remoteName]);
             if(!remoteInfo) throw new ShortStackError("Could not find remote info.  Please specify a tracking branch explicitly. ");
             const match = (/HEAD branch: (\S+)/i).exec(remoteInfo);
             if(!match) parentBranch = "master";
             else parentBranch = match[1].valueOf();
         }
-        const newStack = new Stack(this._git, name, parentBranch, remoteName );
+        const newStack = new Stack(this._git, name, parentBranch, this.remoteName );
 
         this._stacks.set(name, newStack)
         await newStack.AddLevel();

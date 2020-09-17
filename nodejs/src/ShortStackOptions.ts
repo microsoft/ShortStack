@@ -1,38 +1,46 @@
 import { CommandLineOptionsClass, positionalParameter, subCommand, flagParameter } from "./Helpers/CommandLineHelper";
 
+abstract class SubOptions extends CommandLineOptionsClass
+{
+    longDescription= ``
+    validate(reportError: (paramaterName: string, message: string) => void){}
+}
 //------------------------------------------------------------------------------
 // New command options
 //------------------------------------------------------------------------------
-export class ShortStackNewOptions extends CommandLineOptionsClass { 
+export class ShortStackNewOptions extends SubOptions { 
     commandName= "new"
     shortDescription= `Create a new stack or new level on an existing stack`
-    longDescription= ``
 
     @positionalParameter({description: "Name of the stack to create"})
     stackName: string | null = null;
 
     @positionalParameter({description: "Desired root branch for this stack"})
     root: string | null = null;
-
-    validate(reportError: (paramaterName: string, message: string) => void){}
 }
 
 //------------------------------------------------------------------------------
 // go command options
 //------------------------------------------------------------------------------
-export class ShortStackGoOptions extends CommandLineOptionsClass { 
+export class ShortStackGoOptions extends SubOptions { 
     commandName= "go"
     shortDescription= `Go to a particular stack and/or stack level`
-    longDescription= ``
 
     @positionalParameter({description: "Name or level of the stack to go to (default is current stack)"})
     nameOrLevel: string | null = null;
 
     @positionalParameter({description: "Level of the stack to go to"})
     level: string | null = null;
-
-    validate(reportError: (paramaterName: string, message: string) => void){}
 }
+
+//------------------------------------------------------------------------------
+// list command options
+//------------------------------------------------------------------------------
+export class ShortStackListOptions extends SubOptions { 
+    commandName= "list"
+    shortDescription= `List available stacks`
+}
+
 
 //------------------------------------------------------------------------------
 // main program options
@@ -42,12 +50,9 @@ export class ShortStackOptions extends CommandLineOptionsClass {
     shortDescription= `(Version ${require("../package.json").version}) A tool for stacking pull requests in a git repo`
     longDescription= `Great for isolating smaller changes of a much larger big change`
 
-    @flagParameter({description: "Specify this if you want to launch missiles"})
-    launchMissiles = false;
-
     @subCommand({
         description: "A Shortstack action.  Use 'shortstack help actions' to see available actions.",
-        commands: [ShortStackNewOptions, ShortStackGoOptions]
+        commands: [ShortStackNewOptions, ShortStackGoOptions, ShortStackListOptions]
     })
     action?: CommandLineOptionsClass;
 

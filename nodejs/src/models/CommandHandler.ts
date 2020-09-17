@@ -1,4 +1,4 @@
-import { ShortStackNewOptions } from "../ShortStackOptions";
+import { ShortStackListOptions, ShortStackNewOptions } from "../ShortStackOptions";
 import simpleGit, {SimpleGit, SimpleGitOptions} from 'simple-git';
 import {StackInfo} from "./Stack"
 import chalk from "chalk";
@@ -72,7 +72,9 @@ export class CommandHandler
 
         if(!options.stackName && !stackInfo.current)
         {
-            throw new ShortStackError("The current branch is not a stacked branch")
+            throw new ShortStackError("The current branch is not a stacked branch."
+                +"\nUse 'ss list' to see available stacks"
+                +"\nUse 'ss new (stackName)` to create a new stack");
         }
 
         if(options.stackName)
@@ -98,4 +100,29 @@ export class CommandHandler
         // write-host "       ss push   <== pushes your changes up and creates a pull request."
         // write-host "       ss new    <== creates the next branch for a new change.`n`n"
     }
+
+    
+    //------------------------------------------------------------------------------
+    // list - show existing stacks
+    //------------------------------------------------------------------------------
+    async list(options: ShortStackListOptions) 
+    {
+        const stackInfo = await StackInfo.Create(this._git, this.currentBranch as string);
+        if(stackInfo.stacks.length == 0) {
+            this._logLine("There are no stacks in this repo.");
+        }
+        else {
+            this._logLine("Discovered these stacks:")
+            for(const stack of stackInfo.stacks) {
+                
+                this._logLine(`    ${chalk.whiteBright(stack.name)}  (Tracks: ${stack.parentBranch})`);
+                for(const level of stack.levels)
+                {
+                    if(level.levelNumber == 0) continue;
+                    this._logLine(chalk.gray(`        ${level.levelNumber.toString().padStart(3,"0")} ${level.label}`))
+                }
+            }
+        }
+    }
+
 }
