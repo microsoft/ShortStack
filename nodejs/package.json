@@ -11,7 +11,7 @@
   "author": "",
   "license": "UNLICENSED",
   "devDependencies": {
-    "nodemon": "^2.0.4",
+    "nodemon": "^2.0.20",
     "tape": "^4.13.0",
     "typescript": "^3.8.3"
   },
