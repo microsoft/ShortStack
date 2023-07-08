@@ -142,7 +142,7 @@
         "tslint-microsoft-contrib": "^5.0.1",
         "tslint-no-unused-expression-chai": "0.0.3",
         "typescript": "^2.5.3",
-        "vscode": "^1.1.18"
+        "vscode": "^1.1.37"
     },
     "repository": {
         "type": "git",
